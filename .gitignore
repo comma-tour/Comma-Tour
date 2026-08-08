@@ -1,0 +1,31 @@
+# --- 환경변수 (절대 커밋 금지: API 키 포함) ---
+.env
+
+# --- 가상환경 ---
+.venv/
+venv/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# --- CatBoost 학습 시 자동 생성되는 로그 폴더 ---
+catboost_info/
+
+# --- 학습된 모델 파일 (재생성 가능, 용량 커질 수 있음) ---
+models/*.joblib
+models/*.pkl
+!models/.gitkeep
+
+# --- 데이터 산출물 (스크립트로 재생성 가능) ---
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# --- OS / 에디터 ---
+.DS_Store
+Thumbs.db
+.idea/
