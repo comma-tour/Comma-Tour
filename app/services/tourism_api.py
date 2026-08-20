@@ -3,6 +3,8 @@ import requests
 from app.core.config import settings
 from datetime import date
 
+_session = requests.Session()
+
 BASE_KORSERVICE = "https://apis.data.go.kr/B551011/KorService2"
 MOBILE_APP = "CommaTour"
 BASE_CNCTRRATE = "https://apis.data.go.kr/B551011/TatsCnctrRateService"
@@ -20,7 +22,7 @@ def _common_params(extra: dict) -> dict:
 
 
 def _get(url: str, params: dict) -> dict:
-    response = requests.get(
+    response = _session.get(
         url,
         params=params,
         timeout=10,

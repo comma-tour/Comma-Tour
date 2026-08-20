@@ -15,6 +15,23 @@ from app.services.tourism_api import (
 )
 
 
+def _has_final_consonant(text: str) -> bool:
+    if not text:
+        return False
+
+    char = text[-1]
+
+    if not ("가" <= char <= "힣"):
+        return False
+
+    return (ord(char) - ord("가")) % 28 != 0
+
+
+def _with_gwa_wa(text: str) -> str:
+    particle = "과" if _has_final_consonant(text) else "와"
+    return f"{text}{particle}"
+
+
 def build_recommendation_reason(
     base_spot_name: str,
     category_medium: str | None,
@@ -28,14 +45,14 @@ def build_recommendation_reason(
 
     if congestion_reduction_rate is not None:
         return (
-            f"{base_spot_name}과(와) 유사한 {category_text}이며, "
+            f"{_with_gwa_wa(base_spot_name)} 유사한 {category_text}이며, "
             f"향후 7일 평균 관광 집중률이 약 "
             f"{congestion_reduction_rate:.1f}% 낮아 "
             "상대적으로 여유로운 대안 관광지입니다."
         )
 
     return (
-        f"{base_spot_name}과(와) 유사한 {category_text}로, "
+        f"{_with_gwa_wa(base_spot_name)} 유사한 {category_text}로, "
         "AI 추천 결과를 기반으로 선정된 대안 관광지입니다."
     )
 
@@ -63,6 +80,7 @@ def create_recommendations(
     )
 
     congested, candidates = build_ai_inputs(
+        db=db,
         spot=spot,
         related_items=related_items,
     )

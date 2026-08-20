@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.spot import Spot
@@ -30,8 +30,15 @@ def search_spots(
     stmt = select(Spot)
 
     if keyword:
+        normalized_keyword = " ".join(keyword.split())
+        compact_keyword = normalized_keyword.replace(" ", "")
+
         stmt = stmt.where(
-            Spot.tourist_spot_name.ilike(f"%{keyword.strip()}%")
+            func.replace(
+                Spot.tourist_spot_name,
+                " ",
+                "",
+            ).ilike(f"%{compact_keyword}%")
         )
 
     if sido:

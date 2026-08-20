@@ -1,4 +1,6 @@
 from __future__ import annotations
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 import os
 import sys
@@ -20,6 +22,7 @@ if str(AI_DIR) not in sys.path:
 
 
 def build_ai_inputs(
+    db: Session,
     spot: Spot,
     related_items: list[dict],
 ):
@@ -42,6 +45,42 @@ def build_ai_inputs(
         name = item.get("rlteTatsNm")
 
         if not name:
+            continue
+
+        cached_spot = db.scalar(
+            select(Spot).where(
+                Spot.tourist_spot_name == name
+            )
+        )
+
+        if (
+            cached_spot is not None
+            and cached_spot.summary
+            and cached_spot.mapx is not None
+            and cached_spot.mapy is not None
+            and cached_spot.cnctr_rate_7d_avg is not None
+        ):
+            candidates.append(
+                Candidate(
+                    rlte_tats_nm=name,
+                    rlte_rank=int(item.get("rlteRank") or 0),
+                    rlte_ctgry_lcls_nm=item.get(
+                        "rlteCtgryLclsNm", ""
+                    ),
+                    rlte_ctgry_mcls_nm=item.get(
+                        "rlteCtgryMclsNm", ""
+                    ),
+                    rlte_ctgry_scls_nm=item.get(
+                        "rlteCtgrySclsNm", ""
+                    ),
+                    overview=cached_spot.summary,
+                    mapx=float(cached_spot.mapx),
+                    mapy=float(cached_spot.mapy),
+                    cnctr_rate_7d_avg=float(
+                        cached_spot.cnctr_rate_7d_avg
+                    ),
+                )
+            )
             continue
 
         kor_items = search_tourist_spots(

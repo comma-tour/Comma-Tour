@@ -50,10 +50,22 @@ def search_spot_list(
             },
         )
     if keyword:
+        normalized_keyword = " ".join(keyword.split())
+        compact_keyword = normalized_keyword.replace(" ", "")
+
         korservice_items = search_tourist_spots(
-            keyword=keyword,
+            keyword=normalized_keyword,
             limit=limit,
         )
+
+        if (
+            not korservice_items
+            and compact_keyword != normalized_keyword
+        ):
+            korservice_items = search_tourist_spots(
+                keyword=compact_keyword,
+                limit=limit,
+            )
 
         upsert_spots_from_korservice(
             db=db,
