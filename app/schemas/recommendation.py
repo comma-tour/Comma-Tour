@@ -33,6 +33,8 @@ class RecommendationItem(BaseModel):
 
     score: float
 
+    recommendationReason: str
+
     address: str | None = None
     imageUrl: str | None = None
     summary: str | None = None

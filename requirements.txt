@@ -28,6 +28,8 @@ uvicorn==0.52.2
 watchfiles==1.2.0
 websockets==17.0.1
 requests==2.34.2
+reportlab==5.0.0
+pillow==12.3.0
 
 
 # AI recommendation integration

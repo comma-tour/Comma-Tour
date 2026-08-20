@@ -1,13 +1,15 @@
+import secrets
 from math import asin, cos, radians, sin, sqrt
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.spot import Spot
-from app.services.spot_service import get_congestion_level
-import secrets
-
+from app.core.config import settings
 from app.models.shared_course import SharedCourse
+from app.models.spot import Spot
+from app.services.route_service import get_driving_route
+from app.services.spot_service import get_congestion_level
+
 
 def _distance_km(
     lon1: float,
@@ -66,6 +68,65 @@ def _nearest_neighbor(spots: list[Spot]) -> list[Spot]:
 
     return ordered
 
+def _nearest_neighbor_by_driving_distance(
+    spots: list[Spot],
+) -> tuple[list[Spot], dict[tuple[int, int], dict]]:
+    if not spots:
+        return [], {}
+
+    ordered = [spots[0]]
+    remaining = spots[1:]
+
+    route_cache: dict[tuple[int, int], dict] = {}
+
+    while remaining:
+        current = ordered[-1]
+
+        candidates = []
+
+        for spot in remaining:
+            cache_key = (
+                current.id,
+                spot.id,
+            )
+
+            try:
+                driving_route = get_driving_route(
+                    origin_mapx=current.mapx,
+                    origin_mapy=current.mapy,
+                    destination_mapx=spot.mapx,
+                    destination_mapy=spot.mapy,
+                )
+
+                route_cache[cache_key] = driving_route
+
+                distance = driving_route["distanceKm"]
+
+            except Exception:
+                distance = _distance_km(
+                    current.mapx,
+                    current.mapy,
+                    spot.mapx,
+                    spot.mapy,
+                )
+
+            candidates.append(
+                (
+                    distance,
+                    spot,
+                )
+            )
+
+        _, next_spot = min(
+            candidates,
+            key=lambda item: item[0],
+        )
+
+        ordered.append(next_spot)
+        remaining.remove(next_spot)
+
+    return ordered, route_cache
+
 
 def create_course(
     db: Session,
@@ -107,20 +168,68 @@ def create_course(
                 f"{spot.tourist_spot_name}의 좌표 정보가 없습니다."
             )
 
-    ordered_spots = _nearest_neighbor(spots)
+    ordered_spots, route_cache = (
+        _nearest_neighbor_by_driving_distance(spots)
+    )
 
     total_distance = 0.0
+    total_travel_time = 0
+    path = []
 
-    for index in range(len(ordered_spots) - 1):
-        current = ordered_spots[index]
-        next_spot = ordered_spots[index + 1]
+    try:
+        for index in range(len(ordered_spots) - 1):
+            current = ordered_spots[index]
+            next_spot = ordered_spots[index + 1]
 
-        total_distance += _distance_km(
-            current.mapx,
-            current.mapy,
-            next_spot.mapx,
-            next_spot.mapy,
-        )
+            cache_key = (
+                current.id,
+                next_spot.id,
+            )
+
+            driving_route = route_cache.get(
+                cache_key,
+            )
+
+            if driving_route is None:
+                driving_route = get_driving_route(
+                    origin_mapx=current.mapx,
+                    origin_mapy=current.mapy,
+                    destination_mapx=next_spot.mapx,
+                    destination_mapy=next_spot.mapy,
+                )
+
+            total_distance += driving_route["distanceKm"]
+            total_travel_time += driving_route["durationMinutes"]
+
+            segment_path = driving_route["path"]
+
+            if path and segment_path:
+                segment_path = segment_path[1:]
+
+            path.extend(segment_path)
+
+    except Exception:
+        total_distance = 0.0
+        total_travel_time = 0
+
+        for index in range(len(ordered_spots) - 1):
+            current = ordered_spots[index]
+            next_spot = ordered_spots[index + 1]
+
+            total_distance += _distance_km(
+                current.mapx,
+                current.mapy,
+                next_spot.mapx,
+                next_spot.mapy,
+            )
+
+        path = [
+            {
+                "mapx": spot.mapx,
+                "mapy": spot.mapy,
+            }
+            for spot in ordered_spots
+        ]
 
     route = []
 
@@ -152,13 +261,6 @@ def create_course(
             }
         )
 
-    path = [
-        {
-            "mapx": spot.mapx,
-            "mapy": spot.mapy,
-        }
-        for spot in ordered_spots
-    ]
 
     return {
         "course": {
@@ -167,6 +269,7 @@ def create_course(
                 total_distance,
                 2,
             ),
+            "totalTravelTimeMinutes": total_travel_time,
             "route": route,
             "path": path,
         }
@@ -203,8 +306,10 @@ def create_shared_course(
 
     return {
         "shareId": share_id,
-        # 프론트 주소는 나중에 환경변수로 분리 가능
-        "shareUrl": f"http://localhost:3000/course/{share_id}",
+        "shareUrl": (
+            f"{settings.FRONTEND_BASE_URL.rstrip('/')}"
+            f"/course/{share_id}"
+        ),
     }
 
 

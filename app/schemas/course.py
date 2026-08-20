@@ -31,6 +31,7 @@ class CoursePathItem(BaseModel):
 class CourseData(BaseModel):
     spotCount: int
     totalDistanceKm: float
+    totalTravelTimeMinutes: int
     route: list[CourseRouteItem]
     path: list[CoursePathItem]
 

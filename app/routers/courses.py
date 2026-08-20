@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -9,7 +10,7 @@ from app.schemas.course import (
     ShareCourseResponse,
     SharedCourseResponse,
 )
-
+from app.services.course_pdf_service import generate_course_pdf
 from app.services.course_service import (
     create_course,
     create_shared_course,
@@ -153,3 +154,54 @@ def read_shared_course(
         )
 
     return result
+
+
+@router.get(
+    "/shared/{share_id}/pdf",
+)
+def download_shared_course_pdf(
+    share_id: str,
+    db: Session = Depends(get_db),
+):
+    shared_course = get_shared_course(
+        db=db,
+        share_id=share_id,
+    )
+
+    if shared_course is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "SHARE_NOT_FOUND",
+                    "message": "공유 코스를 찾을 수 없습니다.",
+                }
+            },
+        )
+
+    try:
+        pdf_bytes = generate_course_pdf(
+            shared_course,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "code": "PDF_GENERATION_FAILED",
+                    "message": "코스 PDF를 생성하지 못했습니다.",
+                }
+            },
+        )
+
+    filename = f"commatour-course-{share_id}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{filename}"'
+            )
+        },
+    )

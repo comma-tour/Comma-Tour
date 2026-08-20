@@ -15,6 +15,31 @@ from app.services.tourism_api import (
 )
 
 
+def build_recommendation_reason(
+    base_spot_name: str,
+    category_medium: str | None,
+    congestion_reduction_rate: float | None,
+) -> str:
+    category_text = (
+        f"{category_medium} 유형"
+        if category_medium
+        else "유사한 관광 유형"
+    )
+
+    if congestion_reduction_rate is not None:
+        return (
+            f"{base_spot_name}과(와) 유사한 {category_text}이며, "
+            f"향후 7일 평균 관광 집중률이 약 "
+            f"{congestion_reduction_rate:.1f}% 낮아 "
+            "상대적으로 여유로운 대안 관광지입니다."
+        )
+
+    return (
+        f"{base_spot_name}과(와) 유사한 {category_text}로, "
+        "AI 추천 결과를 기반으로 선정된 대안 관광지입니다."
+    )
+
+
 def create_recommendations(
     db: Session,
     spot_id: int,
@@ -34,7 +59,7 @@ def create_recommendations(
         area_cd=spot.area_cd,
         signgu_cd=spot.signgu_cd,
         tourist_spot_name=spot.tourist_spot_name,
-        limit=20,
+        limit=10,
     )
 
     congested, candidates = build_ai_inputs(
@@ -140,6 +165,12 @@ def create_recommendations(
                     2,
                 )
 
+        recommendation_reason = build_recommendation_reason(
+            base_spot_name=spot.tourist_spot_name,
+            category_medium=item.get("rlteCtgryMclsNm"),
+            congestion_reduction_rate=congestion_reduction_rate,
+        )
+
         recommendations.append(
             {
                 "spotId": stored.id,
@@ -167,6 +198,7 @@ def create_recommendations(
                 "mapx": candidate.mapx,
                 "mapy": candidate.mapy,
                 "score": item["score"],
+                "recommendationReason": recommendation_reason,
                 "address": stored.address,
                 "imageUrl": stored.image_url,
                 "summary": candidate.overview,
