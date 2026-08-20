@@ -72,6 +72,27 @@ def search_spots(
         for spot in spots
     ]
 
+
+def _parse_region_from_address(
+    address: str | None,
+) -> tuple[str | None, str | None]:
+    if not address:
+        return None, None
+
+    parts = address.strip().split()
+
+    if not parts:
+        return None, None
+
+    sido = parts[0]
+    sigungu = None
+
+    if len(parts) >= 2 and parts[1].endswith(("시", "군", "구")):
+        sigungu = parts[1]
+
+    return sido, sigungu
+
+
 def _to_float(value: str | None) -> float | None:
     if value in (None, ""):
         return None
@@ -122,6 +143,13 @@ def upsert_spot_from_korservice(
         spot.signgu_cd = f"{region_code}{sigungu_code}"
 
     spot.address = item.get("addr1") or None
+
+    sido, sigungu = _parse_region_from_address(
+        spot.address
+    )
+
+    spot.sido = sido
+    spot.sigungu = sigungu
 
     spot.image_url = (
         item.get("firstimage")
