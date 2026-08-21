@@ -9,9 +9,8 @@ button { cursor:pointer; }
 main { min-height:100vh; }
 .shell { max-width:1240px; min-height:100vh; margin:auto; background:var(--paper); box-shadow:0 0 40px rgba(33,61,45,.06); }
 header { height:82px; padding:0 38px; display:grid; grid-template-columns:1fr 410px 1fr; align-items:center; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; background:rgba(255,255,255,.95); backdrop-filter:blur(10px); }
-.brand { display:flex; align-items:center; gap:9px; font-size:22px; white-space:nowrap; }
-.comma { color:var(--green); font-size:18px; position:relative; transform:rotate(-20deg); }
-.comma::after { content:""; position:absolute; width:7px; height:11px; background:var(--green); left:1px; top:12px; border-radius:0 0 0 8px; }
+.brand { display:flex; align-items:center; white-space:nowrap; }
+.brand img { width:160px; height:auto; display:block; }
 .icon-button { justify-self:end; border:0; background:none; color:var(--ink); padding:8px; }
 .steps { list-style:none; padding:0; margin:0; display:flex; justify-content:space-between; position:relative; }
 .steps::before { content:""; height:1px; background:#d8dedb; position:absolute; top:14px; left:36px; right:36px; }
@@ -135,7 +134,7 @@ select { padding:0 34px 0 13px; color:#59655f; min-width:160px; }
 .timeline button { border:0; background:none; color:#9aa39e; padding:2px; }
 .course-actions { margin-top:22px; display:flex; gap:10px; justify-content:flex-end; }
 footer { display:flex; align-items:center; gap:20px; padding:28px 44px; background:#123c29; color:white; }
-footer .comma,footer .comma::after { color:#7fd3a4; background:#7fd3a4; }
+footer .brand img { filter:brightness(0) invert(1); opacity:.92; }
 footer p { color:#b7c9bf; font-size:12px; flex:1; }
 footer small { color:#779184; }
 
@@ -158,7 +157,7 @@ footer small { color:#779184; }
   .map-view { min-height:360px; }
 }
 @media (max-width:560px) {
-  .brand { font-size:17px; }
+  .brand img { width:132px; }
   .steps li { min-width:65px; }.steps small { font-size:9px; }
   .page-section { padding-left:14px; padding-right:14px; }
   .hero-copy { text-align:left; }.eyebrow { justify-content:flex-start; }.hero-copy br { display:none; }
