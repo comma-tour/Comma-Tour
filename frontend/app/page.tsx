@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { ArrowLeft, Check, ChevronRight, Clock3, Compass, MapPin, Menu, RefreshCw, Route, Search, Sparkles, X } from "lucide-react";
 
 type Spot = {
@@ -55,7 +56,7 @@ function Steps({ step }: { step: number }) {
 }
 
 function Brand() {
-  return <div className="brand"><span className="comma">●</span><strong>쉼표투어</strong></div>;
+  return <div className="brand"><Image src="/images/comma-tour-logo.png" width={192} height={72} alt="쉼표투어" priority /></div>;
 }
 
 function Header({ step }: { step: number }) {
