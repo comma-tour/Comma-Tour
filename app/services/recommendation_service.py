@@ -82,7 +82,10 @@ def create_recommendations(
         area_cd=spot.area_cd,
         signgu_cd=spot.signgu_cd,
         tourist_spot_name=spot.tourist_spot_name,
-        limit=10,
+        # TarRlteTarService1은 관광지 하나당 최대 50건까지 제공한다(2026-09 조사로 확인).
+        # KorService2 매칭 실패로 상당수가 걸러지기 때문에, 처음부터 50건을 받아와야
+        # 필터 이후 남는 후보 수가 줄어들지 않는다.
+        limit=50,
     )
     print(f"[진단] get_related_tourist_spots 원본 반환 건수: {len(related_items)}")
 
