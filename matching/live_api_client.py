@@ -24,7 +24,6 @@ from __future__ import annotations
 import json
 import os
 import time
-from datetime import date
 
 import requests
 from dotenv import load_dotenv
@@ -160,16 +159,25 @@ def get_related_candidates(area_cd: str, signgu_cd: str, keyword: str, base_ym: 
     """
     TarRlteTarService1.searchKeyword1로 특정 관광지의 연관관광지 후보 목록을 가져온다.
 
-    [주의] 이 API는 월 1회(매월 8일) 갱신이라, 조회 시점이 매월 초입이면 이번 달(base_ym) 데이터가
-    아직 반영 안 됐을 수 있다. 결과가 0건이면 자동으로 전월 데이터로 한 번 더 시도한다.
+    [중요] 이 API는 매월 갱신되는 실시간 피드가 아니라, data.go.kr 공식 설명 기준
+    2024년 05월 ~ 2025년 04월 사이의 고정된 스냅샷 데이터만 제공한다(그 이후로는 갱신되지 않음).
+    반드시 base_ym을 이 범위(예: "202504") 안의 값으로 넘길 것 - 범위 밖의 값(예: 현재 월)을
+    넘기면 area_cd/signgu_cd/keyword가 맞아도 항상 0건이 반환된다.
+    결과가 0건이면 자동으로 전월 데이터로 한 번 더 시도하지만, 이 재시도도 유효 범위 밖이면
+    똑같이 0건이므로 애초에 유효 범위 안의 base_ym을 넘기는 것이 중요하다.
+
+    [페이지네이션] numOfRows=50(응답 한 페이지 최대치)으로 요청하되, totalCount가 50보다 크면
+    "전체/관광지/음식/숙박 유형별 최대 각 50위"라는 API 설명대로 한 번의 호출로는 못 받는 나머지가
+    있다는 뜻이므로, pageNo를 늘려가며 totalCount에 도달할 때까지 자동으로 이어받는다.
     """
+    page_size = 50
     params = _common_params(
         {
             "baseYm": base_ym,
             "areaCd": area_cd,
             "signguCd": signgu_cd,
             "keyword": keyword,
-            "numOfRows": 50,
+            "numOfRows": page_size,
             "pageNo": 1,
         }
     )
@@ -182,9 +190,69 @@ def get_related_candidates(area_cd: str, signgu_cd: str, keyword: str, base_ym: 
         print(f"[안내] baseYm={base_ym} 결과 0건(totalCount={total_count}) - 전월({prev_ym})로 재시도")
         params["baseYm"] = prev_ym
         data = _get(f"{BASE_TARRLTETAR}/searchKeyword1", params)
+        total_count = data.get("response", {}).get("body", {}).get("totalCount", 0)
         items = _extract_items(data)
         if not items:
             print(f"[경고] baseYm={prev_ym}로도 결과 0건. area_cd/signgu_cd/keyword를 확인할 것.")
+            return items
+
+    print(f"[안내] '{keyword}' baseYm={params['baseYm']} totalCount={total_count}, 1페이지 {len(items)}건 수신")
+
+    # totalCount가 한 페이지(50건)보다 많으면 나머지 페이지를 이어서 받는다.
+    page_no = 2
+    while len(items) < total_count:
+        params["pageNo"] = page_no
+        data = _get(f"{BASE_TARRLTETAR}/searchKeyword1", params)
+        more_items = _extract_items(data)
+        if not more_items:
+            print(f"[경고] totalCount={total_count}인데 {page_no}페이지에서 빈 응답 - 페이지네이션 중단")
+            break
+        items.extend(more_items)
+        print(f"[안내] '{keyword}' {page_no}페이지 {len(more_items)}건 추가 수신 (누적 {len(items)}/{total_count})")
+        page_no += 1
+
+    return items
+
+
+
+def get_related_candidates_by_area(area_cd: str, signgu_cd: str, base_ym: str) -> list[dict]:
+    """
+    TarRlteTarService1.areaBasedList1로 특정 지역(area_cd/signgu_cd)에 등록된
+    "모든" 중심관광지-연관관광지 관계를 한 번에 가져온다 (관광지명을 몰라도 됨).
+
+    searchKeyword1과 달리 keyword 파라미터가 없다 - 그 지역에 등록된 여러 중심관광지의
+    연관목록이 tAtsNm으로 구분되어 함께 반환된다. 반환된 item 목록을 tAtsNm 기준으로
+    묶으면(group by), 이 지역에 어떤 중심관광지들이 등록돼 있는지 자체를 발굴할 수 있다
+    (2026-09 조사 결과: 원주시 한 곳만으로도 totalCount=800, searchKeyword1의 50건보다 훨씬 큼).
+
+    base_ym 유효 범위는 get_related_candidates()와 동일 (RELATED_SPOT_DATA_MIN_YM~MAX_YM).
+    """
+    page_size = 50
+    params = _common_params(
+        {
+            "baseYm": base_ym,
+            "areaCd": area_cd,
+            "signguCd": signgu_cd,
+            "numOfRows": page_size,
+            "pageNo": 1,
+        }
+    )
+    data = _get(f"{BASE_TARRLTETAR}/areaBasedList1", params)
+    total_count = data.get("response", {}).get("body", {}).get("totalCount", 0)
+    items = _extract_items(data)
+    print(f"[안내] area={area_cd}/{signgu_cd} baseYm={base_ym} totalCount={total_count}, 1페이지 {len(items)}건 수신")
+
+    page_no = 2
+    while len(items) < total_count:
+        params["pageNo"] = page_no
+        data = _get(f"{BASE_TARRLTETAR}/areaBasedList1", params)
+        more_items = _extract_items(data)
+        if not more_items:
+            print(f"[경고] totalCount={total_count}인데 {page_no}페이지에서 빈 응답 - 페이지네이션 중단")
+            break
+        items.extend(more_items)
+        print(f"[안내] area={area_cd}/{signgu_cd} {page_no}페이지 {len(more_items)}건 추가 수신 (누적 {len(items)}/{total_count})")
+        page_no += 1
 
     return items
 
@@ -206,6 +274,15 @@ def get_cnctr_rate_7d_avg(area_cd: str, signgu_cd: str, tats_nm: str) -> float |
     return sum(rates) / len(rates) if rates else None
 
 
+
+
+# TarRlteTarService1(연관관광지)이 실제로 데이터를 제공하는 고정 범위: 2024년 05월 ~ 2025년 04월.
+# (data.go.kr 상세설명 기준. 이 서비스는 매월 갱신되는 게 아니라 이 기간의 스냅샷만 제공한다.)
+RELATED_SPOT_DATA_MIN_YM = "202405"
+RELATED_SPOT_DATA_MAX_YM = "202504"
+DEFAULT_BASE_YM = RELATED_SPOT_DATA_MAX_YM  # 가장 최근에 데이터가 존재하는 달
+
+
 def build_real_congested_spot_with_candidates(
     area_cd: str, signgu_cd: str, tats_nm: str, base_ym: str | None = None
 ) -> tuple[CongestedSpot, list[Candidate]]:
@@ -217,19 +294,45 @@ def build_real_congested_spot_with_candidates(
         area_cd: 지역코드
         signgu_cd: 시군구코드
         tats_nm: 과밀 관광지명 (사용자가 조회한 대상)
-        base_ym: 연관관광지 조회 기준연월 (YYYYMM). 미지정 시 이번 달로 자동 설정.
+        base_ym: 연관관광지 조회 기준연월 (YYYYMM). 미지정 시 DEFAULT_BASE_YM("202504")로 자동 설정.
+            [중요] TarRlteTarService1은 2024.05~2025.04 데이터만 제공하므로, 이 범위 밖의 값을
+            넘기면 (예: 오늘 날짜 기준 월) 후보가 항상 0건으로 나온다. date.today()를 쓰지 말 것.
     """
     if base_ym is None:
-        base_ym = date.today().strftime("%Y%m")
+        base_ym = DEFAULT_BASE_YM
+    elif not (RELATED_SPOT_DATA_MIN_YM <= base_ym <= RELATED_SPOT_DATA_MAX_YM):
+        print(
+            f"[경고] base_ym={base_ym}는 TarRlteTarService1의 데이터 제공 범위"
+            f"({RELATED_SPOT_DATA_MIN_YM}~{RELATED_SPOT_DATA_MAX_YM}) 밖입니다. 항상 0건이 반환될 수 있습니다."
+        )
 
-    # 1. 과밀 관광지 자신의 기본정보 + overview + cnctrRate
-    target_info, target_ambiguous = search_korservice_by_keyword(tats_nm)
+    congested = _build_congested_spot(area_cd, signgu_cd, tats_nm)
+    related_items = get_related_candidates(area_cd, signgu_cd, tats_nm, base_ym)
+    candidates = _build_candidates_from_raw_items(area_cd, signgu_cd, related_items, congested)
+    return congested, candidates
+
+
+def _build_congested_spot(
+    area_cd: str, signgu_cd: str, tats_nm: str, cache: dict[str, dict | None] | None = None
+) -> CongestedSpot:
+    """과밀 관광지 자신의 KorService2 기본정보 + overview + cnctrRate를 조합해 CongestedSpot을 만든다.
+
+    cache: {tats_nm: (target_info, is_ambiguous)} 형태의 KorService2 검색 결과 캐시.
+    같은 이름이 여러 지역 수집에서 반복 조회되는 걸 막기 위해 build_congested_spots_for_region()에서 공유한다.
+    """
+    if cache is not None and tats_nm in cache:
+        target_info, target_ambiguous = cache[tats_nm]
+    else:
+        target_info, target_ambiguous = search_korservice_by_keyword(tats_nm)
+        if cache is not None:
+            cache[tats_nm] = (target_info, target_ambiguous)
+
     if target_info is None:
         raise ValueError(f"KorService2에서 '{tats_nm}'을 찾을 수 없습니다")
     if target_ambiguous:
         print(f"[주의] 과밀 관광지 자신('{tats_nm}')의 KorService2 매칭이 애매합니다 - 결과를 신중히 확인할 것")
 
-    congested = CongestedSpot(
+    return CongestedSpot(
         tats_nm=tats_nm,
         area_cd=area_cd,
         signgu_cd=signgu_cd,
@@ -240,23 +343,47 @@ def build_real_congested_spot_with_candidates(
         cnctr_rate_7d_avg=get_cnctr_rate_7d_avg(area_cd, signgu_cd, tats_nm) or 0.0,
     )
 
-    # 2. 연관관광지 후보 목록
-    related_items = get_related_candidates(area_cd, signgu_cd, tats_nm, base_ym)
 
+def _build_candidates_from_raw_items(
+    area_cd: str,
+    signgu_cd: str,
+    raw_items: list[dict],
+    congested: CongestedSpot,
+    korservice_cache: dict[str, tuple[dict | None, bool]] | None = None,
+    cnctr_cache: dict[tuple[str, str, str], float | None] | None = None,
+) -> list[Candidate]:
+    """TarRlteTarService1 raw item 목록 -> KorService2/cnctrRate 결합 -> Candidate 목록.
+
+    korservice_cache/cnctr_cache를 넘기면 같은 이름(예: 동네 어디서나 나오는 '스타벅스')이
+    여러 중심관광지 밑에서 반복 등장할 때 API를 다시 호출하지 않고 캐시를 재사용한다.
+    """
     candidates: list[Candidate] = []
-    for item in related_items:
+    for item in raw_items:
         rlte_name = item.get("rlteTatsNm")
         if not rlte_name:
             continue
 
-        candidate_info, is_ambiguous = search_korservice_by_keyword(rlte_name)
+        if korservice_cache is not None and rlte_name in korservice_cache:
+            candidate_info, is_ambiguous = korservice_cache[rlte_name]
+        else:
+            candidate_info, is_ambiguous = search_korservice_by_keyword(rlte_name)
+            if korservice_cache is not None:
+                korservice_cache[rlte_name] = (candidate_info, is_ambiguous)
+
         if candidate_info is None:
             print(f"[건너뜀] '{rlte_name}' KorService2 매칭 실패")
             continue
 
-        candidate_cnctr_rate = get_cnctr_rate_7d_avg(
-            item.get("rlteRegnCd", area_cd), item.get("rlteSignguCd", signgu_cd), rlte_name
-        )
+        rlte_area_cd = item.get("rlteRegnCd", area_cd)
+        rlte_signgu_cd = item.get("rlteSignguCd", signgu_cd)
+        cnctr_key = (rlte_area_cd, rlte_signgu_cd, rlte_name)
+        if cnctr_cache is not None and cnctr_key in cnctr_cache:
+            candidate_cnctr_rate = cnctr_cache[cnctr_key]
+        else:
+            candidate_cnctr_rate = get_cnctr_rate_7d_avg(rlte_area_cd, rlte_signgu_cd, rlte_name)
+            if cnctr_cache is not None:
+                cnctr_cache[cnctr_key] = candidate_cnctr_rate
+
         if candidate_cnctr_rate is None:
             # [주의] TatsCnctrRateService는 관광지(contentTypeId=12) 위주로만 집중률을 제공하는 것으로 보임
             # (실행 로그에서 음식점/카페 등 후보 다수가 조회 결과 없음으로 나옴).
@@ -280,7 +407,55 @@ def build_real_congested_spot_with_candidates(
             )
         )
 
-    return congested, candidates
+    return candidates
+
+
+def build_congested_spots_for_region(
+    area_cd: str, signgu_cd: str, base_ym: str | None = None
+) -> list[tuple[CongestedSpot, list[Candidate]]]:
+    """
+    areaBasedList1로 지역 전체를 한 번에 수집해, 그 지역에 등록된 모든 중심관광지 각각에 대해
+    (CongestedSpot, list[Candidate])를 만들어 반환한다. TARGET_SPOTS처럼 관광지 이름을
+    미리 알 필요가 없다 - tAtsNm 기준으로 raw item을 그룹핑해서 자동으로 중심관광지 목록을 발굴한다.
+
+    KorService2/cnctrRate 조회는 이 함수 호출 1번 동안 이름 기준으로 캐싱되어, 같은 이름이
+    여러 중심관광지의 후보로 반복 등장해도 API를 중복 호출하지 않는다.
+    """
+    if base_ym is None:
+        base_ym = DEFAULT_BASE_YM
+
+    raw_items = get_related_candidates_by_area(area_cd, signgu_cd, base_ym)
+
+    by_center: dict[str, list[dict]] = {}
+    for item in raw_items:
+        center_name = item.get("tAtsNm")
+        if not center_name:
+            continue
+        by_center.setdefault(center_name, []).append(item)
+
+    korservice_cache: dict[str, tuple[dict | None, bool]] = {}
+    cnctr_cache: dict[tuple[str, str, str], float | None] = {}
+
+    results: list[tuple[CongestedSpot, list[Candidate]]] = []
+    for center_name, items in by_center.items():
+        print(f"\n=== {center_name} (지역기반, 원본 후보 {len(items)}건) ===")
+        try:
+            congested = _build_congested_spot(area_cd, signgu_cd, center_name, cache=korservice_cache)
+        except ValueError as e:
+            print(f"[건너뜀] '{center_name}' 수집 실패: {e}")
+            continue
+
+        candidates = _build_candidates_from_raw_items(
+            area_cd, signgu_cd, items, congested, korservice_cache=korservice_cache, cnctr_cache=cnctr_cache
+        )
+        if not candidates:
+            print(f"[건너뜀] '{center_name}' KorService2 매칭 성공한 후보 0건 - 데이터셋에서 제외")
+            continue
+
+        print(f"'{center_name}' 완료: 후보 {len(candidates)}건 (원본 {len(items)}건 중 매칭 성공)")
+        results.append((congested, candidates))
+
+    return results
 
 
 if __name__ == "__main__":
