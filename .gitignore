@@ -27,16 +27,6 @@ next-env.d.ts
 # Environment
 .env
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-
-# Virtual environments
-venv/
-.venv/
-
 # IDE
 .vscode/
 .idea/
@@ -44,11 +34,3 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
-
-# Test / cache
-.pytest_cache/
-.mypy_cache/
-.coverage
-
-# Local database
-commatour.db
