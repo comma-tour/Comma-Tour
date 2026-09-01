@@ -72,27 +72,41 @@ def create_recommendations(
             "기준 관광지의 지역 코드가 없습니다."
         )
 
+    print(
+        f"[진단] spot={spot.tourist_spot_name!r} "
+        f"area_cd={spot.area_cd!r} signgu_cd={spot.signgu_cd!r} "
+        f"cnctr_rate_7d_avg={spot.cnctr_rate_7d_avg!r}"
+    )
+
     related_items = get_related_tourist_spots(
         area_cd=spot.area_cd,
         signgu_cd=spot.signgu_cd,
         tourist_spot_name=spot.tourist_spot_name,
         limit=10,
     )
+    print(f"[진단] get_related_tourist_spots 원본 반환 건수: {len(related_items)}")
 
     congested, candidates = build_ai_inputs(
         db=db,
         spot=spot,
         related_items=related_items,
     )
+    print(f"[진단] build_ai_inputs 이후 candidates 건수(필터 전): {len(candidates)}")
 
     # 쉼표투어 서비스 정책:
-    # 기준 관광지보다 실제 집중률이 낮은 관광지만 추천 후보로 사용한다.
+    # 기준 관광지보다 실제 집중률이 낮거나 같은 관광지만 추천 후보로 사용한다.
+    # [주의] cnctrRate 미제공 후보는 build_ai_inputs()에서 기준 관광지와 "동일한 값"으로
+    # 중립 처리된다(AI 팀 코드와 동일한 정책). 여기서 엄격한 '<'를 쓰면 그렇게 중립 처리된
+    # 후보들이 전부 걸러져서, 기준 관광지 집중률이 높을 때 추천 결과가 통째로 0건이 되는
+    # 문제가 있었다. '<='로 완화해 중립 처리된 후보는 통과시키고, 실제로 더 붐비는
+    # (진짜 더 높은 cnctrRate를 가진) 후보만 제외한다.
     if spot.cnctr_rate_7d_avg is not None:
         candidates = [
             candidate
             for candidate in candidates
-            if candidate.cnctr_rate_7d_avg < spot.cnctr_rate_7d_avg
+            if candidate.cnctr_rate_7d_avg <= spot.cnctr_rate_7d_avg
         ]
+    print(f"[진단] 집중률 필터 이후 candidates 건수: {len(candidates)}")
 
     if not candidates:
         return {

@@ -1,7 +1,6 @@
 import requests
 
 from app.core.config import settings
-from datetime import date
 
 _session = requests.Session()
 
@@ -156,13 +155,20 @@ def get_spot_overview(content_id: str) -> str | None:
 
     return overview.strip()
 
+# TarRlteTarService1(연관관광지)이 실제로 데이터를 제공하는 고정 범위: 2024년 05월 ~ 2025년 04월.
+# (data.go.kr 상세설명 기준. 이 서비스는 매월 갱신되는 게 아니라 이 기간의 스냅샷만 제공한다.
+#  date.today() 기준 월을 넣으면 범위 밖이라 항상 0건이 반환된다 - ai/matching/live_api_client.py와
+#  동일한 이슈이니 여기도 함께 고쳐둔다.)
+RELATED_SPOT_DATA_MAX_YM = "202504"
+
+
 def get_related_tourist_spots(
     area_cd: str,
     signgu_cd: str,
     tourist_spot_name: str,
     limit: int = 20,
 ) -> list[dict]:
-    base_ym = date.today().strftime("%Y%m")
+    base_ym = RELATED_SPOT_DATA_MAX_YM
 
     params = _common_params(
         {
