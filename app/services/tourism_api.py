@@ -96,15 +96,20 @@ def search_tourist_spots_by_area(
     page_no: int = 1,
 ) -> tuple[list[dict], int]:
     """areaBasedList2로 특정 지역(시군구) 전체 관광지 목록을 페이지 단위로 조회한다.
-    (1차 심사 범위: 부산 해운대구 벌크 적재용 - scripts/seed_area_spots.py에서 사용)
+    (1차 심사 범위: 부산 해운대구 벌크 적재용 - scripts/seed_haeundae.py에서 사용)
+
+    [버그 수정] KorService2의 지역 필터 파라미터명은 areaCode/sigunguCode(풀네임)이다.
+    TarRlteTarService1의 areaCd/signguCd(축약형)와 헷갈려서 처음에 잘못 넣었더니, 파라미터
+    검증에 걸려 게이트웨이가 정상 스키마 대신 다른 형태로 응답 -> _get()이
+    "API 응답 형식이 올바르지 않습니다" RuntimeError를 던졌다.
 
     Returns:
         (해당 페이지 item 목록, totalCount)
     """
     params = _common_params(
         {
-            "areaCd": area_cd,
-            "sigunguCd": signgu_cd,
+            "areaCode": area_cd,
+            "sigunguCode": signgu_cd,
             "contentTypeId": content_type_id,
             "numOfRows": num_of_rows,
             "pageNo": page_no,
