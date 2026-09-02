@@ -67,11 +67,13 @@ def get_mock_tour_spots(n: int = 20, seed: int = 42) -> list[MockTourSpot]:
                 content_id=f"MOCK{i:04d}",
                 title=f"목데이터 관광지 {i}",
                 content_type_id=rng.choice(["12", "14", "15", "28", "39"]),
-                area_cd=rng.choice(["11", "26", "39"]),  # 예: 서울, 부산, 제주 (실제 코드는 법정동 코드파일로 검증 필요)
-                signgu_cd=str(rng.randint(1, 30)).zfill(3),
-                addr=f"임시 주소 {i}",
-                mapx=126.9 + rng.uniform(-2, 2),
-                mapy=37.5 + rng.uniform(-3, 3),
+                # [P2] 1차 심사 범위(해운대구)에 맞춰 고정값으로 정리. 이전에는 서울/부산/제주 중
+                # 무작위 선택이라 다른 곳에서 해운대구로 통일한 실 데이터/실행 코드와 지역이 어긋났었다.
+                area_cd="26",  # 부산광역시
+                signgu_cd="350",  # 해운대구 (lDongSignguCd 기준)
+                addr=f"부산광역시 해운대구 임시주소 {i}",
+                mapx=129.16 + rng.uniform(-0.02, 0.02),
+                mapy=35.16 + rng.uniform(-0.02, 0.02),
                 overview=rng.choice(_SAMPLE_OVERVIEWS),
             )
         )

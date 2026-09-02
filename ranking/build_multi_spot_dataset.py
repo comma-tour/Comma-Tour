@@ -10,11 +10,18 @@ areaBasedList1이 있다는 게 확인됐고(원주시 한 곳만 800건), 이�
 그래서 TARGET_SPOTS(관광지명) 대신 TARGET_REGIONS(지역코드)를 순회하며
 matching.live_api_client.build_congested_spots_for_region()으로 지역 전체를 수집한다.
 
+[2026-09 변경 2 - P1] 1차 심사 범위가 부산 해운대구 단일 지역으로 확정되어(계획서 2.6절),
+기본 활성 지역을 원주시에서 해운대구로 교체했다. 원주시는 최초 검증 대상으로 이미
+학습쌍을 확보했으므로(기존 data/processed/training_pairs_real_multi.json 산출물을
+training_pairs_wonju_backup.json 등으로 먼저 백업해둘 것 - 이 스크립트를 그대로
+재실행하면 같은 파일명에 덮어써진다), 6.4절 확장 로드맵의 검증·비교용 보조 데이터셋으로
+남겨두고 지금은 해운대구 데이터로 새로 수집한다.
+
 [쿼터 주의] 지역 하나당 중심관광지가 수십~백여 개, 후보가 수백~수천 건 나올 수 있어
 개발계정 일일 한도(TarRlteTarService1/KorService2 각 1,000건)를 금방 넘길 수 있다.
-그래서 기본값은 원주시 1곳만 켜져 있다 - 다른 지역을 추가하려면 TARGET_REGIONS에
-주석 해제하되, 하루 쿼터로 감당 가능한지 먼저 가늠할 것 (참고: preview_area_spots.py로
-사전 규모 확인 가능).
+해운대구(중심관광지 14곳, 후보 586건 추정)는 하루 한도 안에서 충분히 수집 가능한 규모로
+확인되어 기본값으로 켜 두었다. 다른 지역을 추가하려면 TARGET_REGIONS에 주석 해제하되,
+하루 쿼터로 감당 가능한지 먼저 가늠할 것 (참고: preview_area_spots.py로 사전 규모 확인 가능).
 """
 
 from __future__ import annotations
@@ -27,10 +34,10 @@ from matching.live_api_client import RELATED_SPOT_DATA_MAX_YM, build_congested_s
 from ranking.dataset_builder import build_training_pairs
 
 TARGET_REGIONS = [
-    ("51", "51130", "원주시"),  # 강원 원주시 - 1차 검증 대상 (중심관광지 27곳, 후보 800건)
-    # ("11", "11110", "종로구"),      # 서울 종로구 (중심관광지 64곳, 후보 1,451건) - 쿼터 확인 후 활성화
-    # ("26", "26350", "해운대구"),    # 부산 해운대구 (중심관광지 14곳, 후보 586건) - 쿼터 확인 후 활성화
-    # ("50", "50130", "서귀포시"),    # 제주 서귀포시 (중심관광지 135곳, 후보 4,713건) - 쿼터 확인 후 활성화
+    ("26", "26350", "해운대구"),  # 부산 해운대구 - 1차 심사 범위 (중심관광지 14곳, 후보 586건 추정)
+    # ("51", "51130", "원주시"),      # 강원 원주시 - 최초 검증 대상, 기존 산출물은 보조 데이터셋으로 보존
+    # ("11", "11110", "종로구"),      # 서울 종로구 (중심관광지 64곳, 후보 1,451건) - 대회 이후 확장 후보
+    # ("50", "50130", "서귀포시"),    # 제주 서귀포시 (중심관광지 135곳, 후보 4,713건) - 대회 이후 확장 후보
 ]
 
 
@@ -43,7 +50,7 @@ def build_multi_spot_dataset(output_path: str) -> None:
         print(f"\n{'#' * 60}\n### {label} ({area_cd}/{signgu_cd}) 지역 전체 수집 시작\n{'#' * 60}")
         try:
             spot_results = build_congested_spots_for_region(area_cd, signgu_cd, base_ym=RELATED_SPOT_DATA_MAX_YM)
-        except Exception as e:  # noqa: BLE001 - 한 지역 실패가 나머지 지역 수집을 막지 않도록
+        except Exception as e:  # noqa: BLE001 - 한 지역 실패가 나머지 지역 수집을 막지 않도록 (requests 예외 포함 전부)
             print(f"[건너뜀] '{label}' 지역 수집 실패: {e}")
             continue
 

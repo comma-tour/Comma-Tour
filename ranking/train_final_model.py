@@ -35,6 +35,13 @@ def train_and_save_final_model(
     """
     X, y = load_dataset_from_json(dataset_path, exclude_ambiguous=exclude_ambiguous)
 
+    if len(y) == 0:
+        raise SystemExit(
+            f"'{dataset_path}'에 학습 가능한 데이터가 0건입니다 (exclude_ambiguous={exclude_ambiguous}). "
+            "수집 스크립트(build_multi_spot_dataset 등)가 중간에 실패해 산출물이 비어있을 수 있으니 "
+            "먼저 콘솔 로그에서 '저장 완료' 줄의 총 건수를 확인할 것."
+        )
+
     if len(y) < 30:
         print(f"[주의] 학습 데이터가 {len(y)}건뿐입니다. 프로덕션에 쓰기엔 적고, 데이터가 더 쌓이면 재학습할 것.")
 

@@ -59,16 +59,18 @@ def get_mock_congested_spot_with_candidates() -> tuple[CongestedSpot, list[Candi
     cnctrRate는 해안 절경 계열(과밀지와 실제로 유사한 후보)일수록 함께 붐빌 가능성을 고려해 다소 높게,
     카테고리가 다른 후보(음식/쇼핑/숙박)일수록 낮게 설정해 "카테고리 일치 = 항상 좋은 추천"이 아니라는
     직관(비슷한 곳은 오히려 같이 붐빌 수 있다)을 pseudo-label 계산에서 확인할 수 있게 했다.
-    좌표는 강원 원주시 인근 실제 좌표(간현관광지 51.130 시군구코드 기준)에서 반경 수 km 이내로 배치.
+    [P2] 1차 심사 범위(해운대구)에 맞춰, 좌표는 부산 해운대구 인근 실제 좌표(해운대해수욕장 기준)로
+    평행이동했다. 관광지명/소개문구 자체는 여전히 가상의 예시이며 실제 해운대구 관광지가 아니다 -
+    이 모듈은 similarity_matching.py 오프라인 단위 테스트용 목데이터일 뿐, 프로덕션 데이터 소스가 아니다.
     """
     congested = CongestedSpot(
         tats_nm="간현관광지",
-        area_cd="51",
-        signgu_cd="51130",
+        area_cd="26",
+        signgu_cd="26350",
         content_type_id="12",  # 관광지
         overview="탁 트인 해안선과 붉게 물드는 노을이 장관을 이루는 해변으로, 사진 명소로도 유명합니다.",
-        mapx=128.5181,
-        mapy=38.3162,
+        mapx=129.1600,
+        mapy=35.1587,
         cnctr_rate_7d_avg=82.3,  # 과밀 상태 가정
     )
 
@@ -81,8 +83,8 @@ def get_mock_congested_spot_with_candidates() -> tuple[CongestedSpot, list[Candi
             rlte_ctgry_mcls_nm="자연관광",
             rlte_ctgry_scls_nm="해안절경",
             overview="일몰 무렵 바다와 하늘이 온통 주황빛으로 물드는 풍경을 감상할 수 있는 해안 산책로입니다.",
-            mapx=128.5310,
-            mapy=38.3050,
+            mapx=129.1729,
+            mapy=35.1475,
             cnctr_rate_7d_avg=58.1,
         ),
         Candidate(
@@ -92,8 +94,8 @@ def get_mock_congested_spot_with_candidates() -> tuple[CongestedSpot, list[Candi
             rlte_ctgry_mcls_nm="자연관광",
             rlte_ctgry_scls_nm="해안절경",
             overview="파도가 부서지는 갯바위와 넓게 펼쳐진 수평선을 조망할 수 있는 해변 쉼터입니다.",
-            mapx=128.5025,
-            mapy=38.3280,
+            mapx=129.1444,
+            mapy=35.1705,
             cnctr_rate_7d_avg=45.6,
         ),
         Candidate(
@@ -103,8 +105,8 @@ def get_mock_congested_spot_with_candidates() -> tuple[CongestedSpot, list[Candi
             rlte_ctgry_mcls_nm="자연관광",
             rlte_ctgry_scls_nm="해안절경",
             overview="붉은 등대와 어우러진 해안선을 따라 걷는 산책길로, 노을 사진 명소로 알려져 있습니다.",
-            mapx=128.5450,
-            mapy=38.3400,
+            mapx=129.1869,
+            mapy=35.1825,
             cnctr_rate_7d_avg=39.2,
         ),
         # rlteRank는 상위지만 내용은 다소 다른 후보 (같은 대분류 '관광지'지만 자연관광 아님)
@@ -115,8 +117,8 @@ def get_mock_congested_spot_with_candidates() -> tuple[CongestedSpot, list[Candi
             rlte_ctgry_mcls_nm="문화관광",
             rlte_ctgry_scls_nm="전통마을",
             overview="기와지붕이 늘어선 골목을 따라 옛 정취를 느끼며 걸을 수 있는 전통 한옥 마을입니다.",
-            mapx=128.4900,
-            mapy=38.2950,
+            mapx=129.1319,
+            mapy=35.1375,
             cnctr_rate_7d_avg=28.4,
         ),
         Candidate(
@@ -126,8 +128,8 @@ def get_mock_congested_spot_with_candidates() -> tuple[CongestedSpot, list[Candi
             rlte_ctgry_mcls_nm="문화관광",
             rlte_ctgry_scls_nm="전시시설",
             overview="선사시대부터 이어진 유물을 전시한 역사 박물관으로, 지역의 문화사를 한눈에 살펴볼 수 있습니다.",
-            mapx=128.4750,
-            mapy=38.3500,
+            mapx=129.1169,
+            mapy=35.1925,
             cnctr_rate_7d_avg=22.7,
         ),
         # 전혀 다른 후보 (음식/쇼핑/숙박 계열)
@@ -138,8 +140,8 @@ def get_mock_congested_spot_with_candidates() -> tuple[CongestedSpot, list[Candi
             rlte_ctgry_mcls_nm="음식",
             rlte_ctgry_scls_nm="한식",
             overview="지역 향토 음식을 대표하는 손맛 깃든 메뉴로 유명한 오래된 식당입니다.",
-            mapx=128.5200,
-            mapy=38.3100,
+            mapx=129.1619,
+            mapy=35.1525,
             cnctr_rate_7d_avg=15.9,
         ),
         Candidate(
@@ -149,8 +151,8 @@ def get_mock_congested_spot_with_candidates() -> tuple[CongestedSpot, list[Candi
             rlte_ctgry_mcls_nm="쇼핑",
             rlte_ctgry_scls_nm="전통시장",
             overview="다양한 지역 특산물과 길거리 음식을 즐길 수 있는 활기 넘치는 전통 시장입니다.",
-            mapx=128.5600,
-            mapy=38.2800,
+            mapx=129.2019,
+            mapy=35.1225,
             cnctr_rate_7d_avg=33.5,
         ),
         Candidate(
@@ -160,8 +162,8 @@ def get_mock_congested_spot_with_candidates() -> tuple[CongestedSpot, list[Candi
             rlte_ctgry_mcls_nm="숙박",
             rlte_ctgry_scls_nm="리조트",
             overview="바다 전망을 갖춘 객실과 다양한 부대시설을 갖춘 휴양형 리조트입니다.",
-            mapx=128.5700,
-            mapy=38.3600,
+            mapx=129.2119,
+            mapy=35.2025,
             cnctr_rate_7d_avg=19.8,
         ),
     ]

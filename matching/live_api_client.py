@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
@@ -39,7 +40,55 @@ BASE_KORSERVICE = "https://apis.data.go.kr/B551011/KorService2"
 BASE_TARRLTETAR = "https://apis.data.go.kr/B551011/TarRlteTarService1"
 BASE_CNCTRRATE = "https://apis.data.go.kr/B551011/TatsCnctrRateService"
 
-REQUEST_INTERVAL_SEC = 0.2  # 개발계정 트래픽 한도(일 1,000건) 보호용 최소 호출 간격
+# [쿼터 보호용 디스크 캐시] 이전에는 korservice_cache/cnctr_cache가 build_congested_spots_for_region()
+# 안에서 매 실행마다 빈 dict로 새로 만들어져서, 스크립트를 재실행할 때마다 이미 성공했던 조회까지
+# 전부 API에 다시 태웠다. 429(트래픽 한도)로 몇 번 재시도-실패를 반복하다 보니 하루 쿼터를
+# 예상보다 훨씬 빨리 소진하는 원인이 됐다. 이제 조회 결과를 디스크에 저장해뒀다가 다음 실행에서
+# 그대로 재사용한다 - 같은 관광지명/contentId는 다시 조회하지 않는다.
+_CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "cache"
+_KORSERVICE_CACHE_PATH = _CACHE_DIR / "korservice_search_cache.json"
+_CNCTR_CACHE_PATH = _CACHE_DIR / "cnctr_rate_cache.json"
+_OVERVIEW_CACHE_PATH = _CACHE_DIR / "overview_cache.json"
+
+
+def _load_json_cache(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (ValueError, OSError) as e:
+        print(f"[경고] 캐시 파일 '{path}' 읽기 실패({e}) - 빈 캐시로 시작")
+        return {}
+
+
+def _save_json_cache(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    tmp_path.replace(path)  # 원자적 교체 - 저장 도중 죽어도 기존 캐시 파일은 손상되지 않음
+
+REQUEST_INTERVAL_SEC = 0.5  # 트래픽 한도 보호용 최소 호출 간격
+# [2단계 재시도 이후에도 429 발생] 0.2초 간격(초당 5건)으로도 429 Too Many Requests가 나서
+# 0.5초(초당 2건)로 늘렸다. 이건 일일 총량(1,000건) 문제가 아니라 초당/분당 순간 요청 속도
+# 제한으로 보인다 - 응답이 OpenAPI_ServiceResponse 게이트웨이 에러 스키마가 아니라 HTTP 429로
+# 곧바로 왔기 때문.
+
+# (P0-3, P1-이후 개선) signgu_cd -> KorService2 addr1 매칭 힌트 (좁은 것부터 넓은 순).
+# 정식 법정동코드 매핑 테이블(OT 자료 "관광지 시군구 코드정보" 파일)을 아직 반영하지 않아
+# 임시로 현재 다루는 지역만 수동 등록한다. 새 지역 추가 시 여기에 한 줄 추가할 것.
+#
+# [2단계로 바꾼 이유] 해운대해수욕장 실행 로그 확인 결과, 정답 매칭이 "해운대구"가 아니라
+# "부산광역시"의 다른 구(예: 태종대=영도구, 국제시장=중구, 롯데프리미엄아울렛=기장군)에 있는
+# 케이스가 많았다. "해운대구" 1단계만으로는 이런 후보가 전부 필터를 통과 못 해 그냥 첫 번째로
+# 폴백되어, 오히려 애매 매칭 비율이 27%->32%로 늘었다(recommend() 8/17 실행 로그 참고).
+# 1단계(해운대구)에서 못 찾으면 2단계(부산광역시)로 넓혀서, 최소한 완전 타지역(예: '태종대(횡성)')
+# 오매칭은 걸러내도록 한다.
+SIGNGU_REGION_HINTS: dict[str, list[str]] = {
+    "26350": ["해운대구", "부산광역시"],  # 부산광역시 해운대구 (1차 심사 범위: 과밀 판별 대상)
+    "51130": ["원주시", "강원"],  # 강원 원주시 (AI 모델 검증용, 6.4절 참고)
+}
 
 
 def _common_params(extra: dict) -> dict:
@@ -54,15 +103,46 @@ def _common_params(extra: dict) -> dict:
     return params
 
 
-def _get(url: str, params: dict) -> dict:
+def _get(url: str, params: dict, max_retries: int = 3) -> dict:
     """
     공통 GET 요청 + 에러 체크.
     data.go.kr 게이트웨이 레벨 에러(인증키 미등록 등)는 정상 응답과 다른 스키마(OpenAPI_ServiceResponse)로
     오는 경우가 있어 별도로 처리하고, 그 외 예상치 못한 구조는 원문을 그대로 보여줘서 디버깅할 수 있게 한다.
+
+    [재시도] 두 가지 유형을 구분해서 재시도한다:
+    1) 타임아웃/연결 오류(requests.exceptions.Timeout/ConnectionError) - 일시적 네트워크 문제
+    2) HTTP 429 Too Many Requests - 초당/분당 순간 요청 속도 제한 (해운대구 벌크 수집 중 실제 발생 확인,
+       REQUEST_INTERVAL_SEC를 늘려도 후보 수백 건을 연속 조회하면 여전히 발생할 수 있다)
+    둘 다 지수 백오프(1초 -> 2초 -> 4초...)로 최대 max_retries회 재시도한다. 그 외 4xx(429 제외)/
+    게이트웨이 에러는 재시도해도 똑같이 실패할 가능성이 높아 바로 예외를 올린다.
     """
     time.sleep(REQUEST_INTERVAL_SEC)
-    resp = requests.get(url, params=params, timeout=10)
-    resp.raise_for_status()
+
+    attempt = 0
+    while True:
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            if resp.status_code == 429:
+                raise requests.exceptions.HTTPError("429 Too Many Requests", response=resp)
+            resp.raise_for_status()
+            break
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            attempt += 1
+            if attempt > max_retries:
+                raise
+            wait_sec = 2 ** (attempt - 1)
+            print(f"[재시도] 네트워크 오류({e.__class__.__name__}) - {wait_sec}초 후 재시도 ({attempt}/{max_retries})")
+            time.sleep(wait_sec)
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else None
+            if status != 429:
+                raise
+            attempt += 1
+            if attempt > max_retries:
+                raise
+            wait_sec = 2 ** attempt  # 429는 조금 더 넉넉하게 (2,4,8...초)
+            print(f"[재시도] 429 Too Many Requests - {wait_sec}초 후 재시도 ({attempt}/{max_retries})")
+            time.sleep(wait_sec)
 
     try:
         data = resp.json()
@@ -97,7 +177,9 @@ def _extract_items(data: dict) -> list[dict]:
     return item
 
 
-def search_korservice_by_keyword(keyword: str) -> tuple[dict | None, bool]:
+def search_korservice_by_keyword(
+    keyword: str, region_hints: list[str] | None = None
+) -> tuple[dict | None, bool]:
     """
     KorService2.searchKeyword2로 관광지명을 검색해 contentid/contenttypeid/mapx/mapy를 가져온다.
     [ID 매칭 이슈] 결과가 여러 건이면 경고를 출력하고 첫 번째 결과를 사용한다 - 실행 결과를 반드시 확인할 것.
@@ -107,6 +189,13 @@ def search_korservice_by_keyword(keyword: str) -> tuple[dict | None, bool]:
     법정동코드(lDongRegnCd/lDongSignguCd)는 서로 다른 코드 체계라, 이 함수는 지역 필터 없이 전국에서
     이름만으로 검색한다. 그래서 동명이인(예: '베니키아호텔'이 원주가 아닌 여수/천안에도 있음)이 잘못
     매칭될 수 있다. 이 함수는 (결과, is_ambiguous) 튜플을 반환해 호출부가 애매한 매칭을 표시할 수 있게 한다.
+
+    region_hints: (P0-3, 2단계로 개선) 좁은 것부터 넓은 순으로 지역명 리스트를 넘기면
+    (예: ["해운대구", "부산광역시"]), 결과가 여러 건일 때 앞 힌트부터 순서대로 addr1에 포함되는지
+    확인해 처음으로 일치하는 후보 집합을 사용한다. TarRlteTarService1이 조회 기준 시군구와
+    무관하게 상위 시/도 전역에서 연관관광지를 반환하는 경우가 많아, 시군구 단일 힌트만으로는
+    정답이 오히려 걸러져 첫 번째로 잘못 폴백되는 사례가 있었다(해운대해수욕장 실행 로그로 확인).
+    어느 힌트로도 일치 항목이 없으면 기존처럼 첫 번째를 쓴다.
 
     Returns:
         (매칭된 item 또는 None, 검색 결과가 2건 이상이라 애매했는지 여부)
@@ -127,6 +216,20 @@ def search_korservice_by_keyword(keyword: str) -> tuple[dict | None, bool]:
         return None, False
 
     is_ambiguous = len(items) > 1
+
+    if is_ambiguous and region_hints:
+        for hint in region_hints:
+            region_matches = [it for it in items if hint in (it.get("addr1") or "")]
+            if region_matches:
+                if len(region_matches) < len(items):
+                    print(
+                        f"[안내] '{keyword}' 검색 결과 {len(items)}건 중 '{hint}' 포함 "
+                        f"{len(region_matches)}건으로 좁혀 사용"
+                    )
+                items = region_matches
+                is_ambiguous = len(items) > 1
+                break
+
     if is_ambiguous:
         titles = [it.get("title") for it in items]
         print(f"[경고] '{keyword}' 검색 결과 {len(items)}건(지역 필터 없음, 동명이인 가능) - 첫 번째 사용. 후보: {titles}")
@@ -313,17 +416,25 @@ def build_real_congested_spot_with_candidates(
 
 
 def _build_congested_spot(
-    area_cd: str, signgu_cd: str, tats_nm: str, cache: dict[str, dict | None] | None = None
+    area_cd: str,
+    signgu_cd: str,
+    tats_nm: str,
+    cache: dict[str, dict | None] | None = None,
+    overview_cache: dict[str, str] | None = None,
 ) -> CongestedSpot:
     """과밀 관광지 자신의 KorService2 기본정보 + overview + cnctrRate를 조합해 CongestedSpot을 만든다.
 
     cache: {tats_nm: (target_info, is_ambiguous)} 형태의 KorService2 검색 결과 캐시.
     같은 이름이 여러 지역 수집에서 반복 조회되는 걸 막기 위해 build_congested_spots_for_region()에서 공유한다.
+    overview_cache: {content_id: overview} 캐시. get_overview()는 자체 캐시가 없어 매번 API를
+    호출하므로, 여기서 감싸서 같은 contentId를 다시 조회하지 않게 한다.
     """
+    region_hints = SIGNGU_REGION_HINTS.get(signgu_cd)
+
     if cache is not None and tats_nm in cache:
         target_info, target_ambiguous = cache[tats_nm]
     else:
-        target_info, target_ambiguous = search_korservice_by_keyword(tats_nm)
+        target_info, target_ambiguous = search_korservice_by_keyword(tats_nm, region_hints=region_hints)
         if cache is not None:
             cache[tats_nm] = (target_info, target_ambiguous)
 
@@ -332,12 +443,20 @@ def _build_congested_spot(
     if target_ambiguous:
         print(f"[주의] 과밀 관광지 자신('{tats_nm}')의 KorService2 매칭이 애매합니다 - 결과를 신중히 확인할 것")
 
+    content_id = target_info["contentid"]
+    if overview_cache is not None and content_id in overview_cache:
+        overview = overview_cache[content_id]
+    else:
+        overview = get_overview(content_id)
+        if overview_cache is not None:
+            overview_cache[content_id] = overview
+
     return CongestedSpot(
         tats_nm=tats_nm,
         area_cd=area_cd,
         signgu_cd=signgu_cd,
         content_type_id=target_info["contenttypeid"],
-        overview=get_overview(target_info["contentid"]),
+        overview=overview,
         mapx=float(target_info["mapx"]),
         mapy=float(target_info["mapy"]),
         cnctr_rate_7d_avg=get_cnctr_rate_7d_avg(area_cd, signgu_cd, tats_nm) or 0.0,
@@ -351,12 +470,16 @@ def _build_candidates_from_raw_items(
     congested: CongestedSpot,
     korservice_cache: dict[str, tuple[dict | None, bool]] | None = None,
     cnctr_cache: dict[tuple[str, str, str], float | None] | None = None,
+    overview_cache: dict[str, str] | None = None,
 ) -> list[Candidate]:
     """TarRlteTarService1 raw item 목록 -> KorService2/cnctrRate 결합 -> Candidate 목록.
 
-    korservice_cache/cnctr_cache를 넘기면 같은 이름(예: 동네 어디서나 나오는 '스타벅스')이
-    여러 중심관광지 밑에서 반복 등장할 때 API를 다시 호출하지 않고 캐시를 재사용한다.
+    korservice_cache/cnctr_cache/overview_cache를 넘기면 같은 이름(예: 동네 어디서나 나오는
+    '스타벅스')이나 같은 contentId가 여러 중심관광지 밑에서 반복 등장할 때 API를 다시 호출하지
+    않고 캐시를 재사용한다.
     """
+    region_hints = SIGNGU_REGION_HINTS.get(signgu_cd)
+
     candidates: list[Candidate] = []
     for item in raw_items:
         rlte_name = item.get("rlteTatsNm")
@@ -366,7 +489,7 @@ def _build_candidates_from_raw_items(
         if korservice_cache is not None and rlte_name in korservice_cache:
             candidate_info, is_ambiguous = korservice_cache[rlte_name]
         else:
-            candidate_info, is_ambiguous = search_korservice_by_keyword(rlte_name)
+            candidate_info, is_ambiguous = search_korservice_by_keyword(rlte_name, region_hints=region_hints)
             if korservice_cache is not None:
                 korservice_cache[rlte_name] = (candidate_info, is_ambiguous)
 
@@ -392,6 +515,14 @@ def _build_candidates_from_raw_items(
             candidate_cnctr_rate = congested.cnctr_rate_7d_avg
             print(f"[안내] '{rlte_name}' cnctrRate 미제공 - 중립값(과밀지와 동일)으로 대체")
 
+        content_id = candidate_info["contentid"]
+        if overview_cache is not None and content_id in overview_cache:
+            overview = overview_cache[content_id]
+        else:
+            overview = get_overview(content_id)
+            if overview_cache is not None:
+                overview_cache[content_id] = overview
+
         candidates.append(
             Candidate(
                 rlte_tats_nm=rlte_name,
@@ -399,7 +530,7 @@ def _build_candidates_from_raw_items(
                 rlte_ctgry_lcls_nm=item.get("rlteCtgryLclsNm", ""),
                 rlte_ctgry_mcls_nm=item.get("rlteCtgryMclsNm", ""),
                 rlte_ctgry_scls_nm=item.get("rlteCtgrySclsNm", ""),
-                overview=get_overview(candidate_info["contentid"]),
+                overview=overview,
                 mapx=float(candidate_info["mapx"]),
                 mapy=float(candidate_info["mapy"]),
                 cnctr_rate_7d_avg=candidate_cnctr_rate,
@@ -418,8 +549,10 @@ def build_congested_spots_for_region(
     (CongestedSpot, list[Candidate])를 만들어 반환한다. TARGET_SPOTS처럼 관광지 이름을
     미리 알 필요가 없다 - tAtsNm 기준으로 raw item을 그룹핑해서 자동으로 중심관광지 목록을 발굴한다.
 
-    KorService2/cnctrRate 조회는 이 함수 호출 1번 동안 이름 기준으로 캐싱되어, 같은 이름이
-    여러 중심관광지의 후보로 반복 등장해도 API를 중복 호출하지 않는다.
+    KorService2/cnctrRate/overview 조회는 이름·contentId 기준으로 캐싱되어, 같은 이름/콘텐츠가
+    여러 중심관광지의 후보로 반복 등장해도 API를 중복 호출하지 않는다. 이 캐시는 디스크
+    (data/cache/*.json)에도 저장되어 스크립트를 재실행해도 유지된다 - 429(트래픽 한도)로 중간에
+    멈춘 뒤 다시 실행해도 이미 성공했던 조회는 API를 다시 태우지 않는다.
     """
     if base_ym is None:
         base_ym = DEFAULT_BASE_YM
@@ -433,21 +566,57 @@ def build_congested_spots_for_region(
             continue
         by_center.setdefault(center_name, []).append(item)
 
-    korservice_cache: dict[str, tuple[dict | None, bool]] = {}
-    cnctr_cache: dict[tuple[str, str, str], float | None] = {}
+    korservice_cache: dict[str, tuple[dict | None, bool]] = _load_json_cache(_KORSERVICE_CACHE_PATH)
+    cnctr_cache_raw: dict[str, float | None] = _load_json_cache(_CNCTR_CACHE_PATH)
+    # cnctr_cache의 키는 튜플이라 JSON에 그대로 못 담는다 - "area|signgu|name" 문자열로 저장/복원한다.
+    cnctr_cache: dict[tuple[str, str, str], float | None] = {
+        tuple(k.split("|", 2)): v for k, v in cnctr_cache_raw.items()  # type: ignore[misc]
+    }
+    overview_cache: dict[str, str] = _load_json_cache(_OVERVIEW_CACHE_PATH)
+
+    def _flush_caches() -> None:
+        _save_json_cache(_KORSERVICE_CACHE_PATH, korservice_cache)
+        _save_json_cache(_CNCTR_CACHE_PATH, {"|".join(k): v for k, v in cnctr_cache.items()})
+        _save_json_cache(_OVERVIEW_CACHE_PATH, overview_cache)
 
     results: list[tuple[CongestedSpot, list[Candidate]]] = []
     for center_name, items in by_center.items():
         print(f"\n=== {center_name} (지역기반, 원본 후보 {len(items)}건) ===")
+        # [수정] 429는 requests.exceptions.HTTPError로 올라오지 RuntimeError가 아니다 - 예전에
+        # (ValueError, RuntimeError)로만 잡아서 429가 그대로 새어나가 지역 수집 함수 전체를 죽이고
+        # 이미 모은 results까지 날렸다(부산시립미술관에서 재현됨). requests 예외 계열까지 넓게 잡는다.
         try:
-            congested = _build_congested_spot(area_cd, signgu_cd, center_name, cache=korservice_cache)
-        except ValueError as e:
+            congested = _build_congested_spot(
+                area_cd, signgu_cd, center_name, cache=korservice_cache, overview_cache=overview_cache
+            )
+        except (ValueError, RuntimeError, requests.exceptions.RequestException) as e:
             print(f"[건너뜀] '{center_name}' 수집 실패: {e}")
+            _flush_caches()
             continue
 
-        candidates = _build_candidates_from_raw_items(
-            area_cd, signgu_cd, items, congested, korservice_cache=korservice_cache, cnctr_cache=cnctr_cache
-        )
+        # [중요] 마찬가지로 이 지점 하나만 건너뛰고 이미 모은 results는 지킨다. results가 지역
+        # 수집 함수 끝에서야 반환되는 로컬 변수라, 중간에 예외가 새면 호출부가 아무것도 못 받아
+        # build_multi_spot_dataset.py에서 "총 0건"이 되는 게 반복됐던 원인이다.
+        try:
+            candidates = _build_candidates_from_raw_items(
+                area_cd,
+                signgu_cd,
+                items,
+                congested,
+                korservice_cache=korservice_cache,
+                cnctr_cache=cnctr_cache,
+                overview_cache=overview_cache,
+            )
+        except Exception as e:  # noqa: BLE001 - 한 지점 실패가 이미 모은 다른 지점 결과를 날리지 않도록
+            print(f"[건너뜀] '{center_name}' 후보 수집 중 오류로 제외: {e}")
+            _flush_caches()
+            continue
+
+        # [체크포인트] 지점 하나가 끝날 때마다 캐시를 디스크에 저장한다. 이후 지점에서 429가 나서
+        # 이 함수 자체가 통째로 죽더라도(예: 위 두 try로도 못 막는 예상 밖 예외), 여기까지 성공한
+        # 조회 결과는 캐시 파일에 남아 다음 실행에서 재사용된다.
+        _flush_caches()
+
         if not candidates:
             print(f"[건너뜀] '{center_name}' KorService2 매칭 성공한 후보 0건 - 데이터셋에서 제외")
             continue
