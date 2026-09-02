@@ -1,4 +1,4 @@
-# notebooks/
+**notebooks/**
 
 실험 · 분석용 노트북 저장 위치.
 
