@@ -88,6 +88,40 @@ def search_tourist_spots(
     return _extract_items(data)
 
 
+def search_tourist_spots_by_area(
+    area_cd: str,
+    signgu_cd: str,
+    content_type_id: str = "12",
+    num_of_rows: int = 100,
+    page_no: int = 1,
+) -> tuple[list[dict], int]:
+    """areaBasedList2로 특정 지역(시군구) 전체 관광지 목록을 페이지 단위로 조회한다.
+    (1차 심사 범위: 부산 해운대구 벌크 적재용 - scripts/seed_area_spots.py에서 사용)
+
+    Returns:
+        (해당 페이지 item 목록, totalCount)
+    """
+    params = _common_params(
+        {
+            "areaCd": area_cd,
+            "sigunguCd": signgu_cd,
+            "contentTypeId": content_type_id,
+            "numOfRows": num_of_rows,
+            "pageNo": page_no,
+            "arrange": "C",
+        }
+    )
+
+    data = _get(
+        f"{BASE_KORSERVICE}/areaBasedList2",
+        params,
+    )
+
+    total_count = data.get("response", {}).get("body", {}).get("totalCount", 0)
+
+    return _extract_items(data), total_count
+
+
 def get_cnctr_rate_7d_avg(
     area_cd: str,
     signgu_cd: str,

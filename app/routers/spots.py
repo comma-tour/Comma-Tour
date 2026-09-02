@@ -19,6 +19,19 @@ router = APIRouter(
     tags=["spots"],
 )
 
+# 1차 심사 범위: 부산 해운대구 단일 지역 (계획서 2.6절).
+# KorService2 keyword 검색(searchKeyword2)은 지역 필터 없이 전국을 대상으로 하므로,
+# 동명이인 관광지가 타 지역에서 잘못 적재되는 것을 막기 위해 addr1 기준으로 한 번 더 거른다.
+IN_SCOPE_ADDRESS_KEYWORD = "해운대구"
+
+
+def _filter_in_scope(items: list[dict]) -> list[dict]:
+    return [
+        item
+        for item in items
+        if IN_SCOPE_ADDRESS_KEYWORD in (item.get("addr1") or "")
+    ]
+
 
 def get_db():
     db = SessionLocal()
@@ -66,6 +79,8 @@ def search_spot_list(
                 keyword=compact_keyword,
                 limit=limit,
             )
+
+        korservice_items = _filter_in_scope(korservice_items)
 
         upsert_spots_from_korservice(
             db=db,
