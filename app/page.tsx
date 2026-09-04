@@ -3,8 +3,9 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { ArrowLeft, Check, ChevronRight, Clock3, Compass, MapPin, Menu, RefreshCw, Route, Search, Sparkles, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Clock3, Compass, MapPin, RefreshCw, Route, Search, Sparkles, X } from "lucide-react";
 import { ApiSpot, CourseData, RecommendationItem, createCourse, getRecommendations, searchSpots, shareCourse } from "../lib/api";
+import KakaoCourseMap from "./components/KakaoCourseMap";
 
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80";
 
@@ -34,7 +35,7 @@ const message = (error:unknown) => error instanceof Error ? error.message : "요
 
 function Brand() { return <div className="brand"><Image src="/images/comma-tour-logo.png" width={192} height={72} alt="쉼표투어" priority /></div>; }
 function Steps({step}:{step:number}) { return <ol className="steps" aria-label="서비스 진행 단계">{["과밀 관광지","유사 명소 추천","코스 생성"].map((label,i)=><li className={step>=i+1?"active":""} key={label}><span>{step>i+1?<Check size={13}/>:i+1}</span><small>{label}</small></li>)}</ol>; }
-function Header({step}:{step:number}) { return <header><Brand/><Steps step={step}/><button className="icon-button" aria-label="메뉴 열기"><Menu/></button></header>; }
+function Header({step}:{step:number}) { return <header><Brand/><Steps step={step}/></header>; }
 function Gauge({rate}:{rate:number|null}) { const state=crowd(rate); const value=Math.max(0,Math.min(rate??0,100)); return <div className={`gauge ${state.className}`} style={{"--rate":`${value*3.6}deg`} as React.CSSProperties}><div><strong>{rate===null?"-":`${Math.round(rate)}%`}</strong><small>{state.text}</small></div></div>; }
 
 export default function Home() {
@@ -94,7 +95,7 @@ export default function Home() {
 
     {step===3&&course&&<section className="page-section"><button className="back" onClick={()=>{setError("");setStep(2);}}><ArrowLeft size={17}/> 추천 명소 수정</button><div className="course-title"><span>YOUR PAUSE ROUTE</span><h1>여유를 잇는 나만의 코스</h1><p>선택한 명소를 이동 경로에 맞게 정렬했습니다.</p></div>
       <div className="summary"><div><MapPin/><span>방문 명소<strong>{course.spotCount}곳</strong></span></div><div><Route/><span>예상 거리<strong>{course.totalDistanceKm.toFixed(1)}km</strong></span></div><div><Clock3/><span>예상 시간<strong>{course.totalTravelTimeMinutes}분</strong></span></div><div><Compass/><span>코스 유형<strong>여유</strong></span></div></div>{error&&<div className="api-error" role="alert">{error}</div>}{shareUrl&&<div className="share-result">공유 링크가 복사되었습니다. <a href={shareUrl}>{shareUrl}</a></div>}
-      <div className="course-layout"><div className="map-view" aria-label="코스 지도 미리보기"><div className="map-road road-one"/><div className="map-road road-two"/>{course.route.map((spot,index)=><div className={`map-marker marker-${index+1}`} key={spot.spotId}>{index+1}<span>{spot.tAtsNm}</span></div>)}<div className="map-label">실제 경로 기준 {course.totalDistanceKm.toFixed(1)}km</div></div><aside className="timeline"><h2>코스 상세</h2>{course.route.map(spot=><article key={spot.spotId}><span className="number">{spot.order}</span>{ }<img src={spot.imageUrl??FALLBACK_IMAGE} alt={`${spot.tAtsNm} 전경`}/><div><h3>{spot.tAtsNm}</h3><p>{spot.category??spot.address??"관광지"}</p><b className={`status ${crowd(spot.cnctrRate7dAvg).className}`}>집중률 {spot.cnctrRate7dAvg===null?"-":`${Math.round(spot.cnctrRate7dAvg)}%`} · {crowd(spot.cnctrRate7dAvg).text}</b></div><button aria-label={`${spot.tAtsNm} 코스에서 제외`} onClick={()=>{setSelected(ids=>ids.filter(id=>id!==spot.spotId));setStep(2);}}><X size={17}/></button></article>)}</aside></div>
+      <div className="course-layout"><KakaoCourseMap course={course}/><aside className="timeline"><h2>코스 상세</h2>{course.route.map(spot=><article key={spot.spotId}><span className="number">{spot.order}</span>{ }<img src={spot.imageUrl??FALLBACK_IMAGE} alt={`${spot.tAtsNm} 전경`}/><div><h3>{spot.tAtsNm}</h3><p>{spot.category??spot.address??"관광지"}</p><b className={`status ${crowd(spot.cnctrRate7dAvg).className}`}>집중률 {spot.cnctrRate7dAvg===null?"-":`${Math.round(spot.cnctrRate7dAvg)}%`} · {crowd(spot.cnctrRate7dAvg).text}</b></div><button aria-label={`${spot.tAtsNm} 코스에서 제외`} onClick={()=>{setSelected(ids=>ids.filter(id=>id!==spot.spotId));setStep(2);}}><X size={17}/></button></article>)}</aside></div>
       <div className="course-actions"><button className="secondary" onClick={()=>{setSelected([]);setStep(2);}}><RefreshCw size={17}/> 다시 추천받기</button><button className="secondary" onClick={()=>setStep(2)}>코스 수정하기</button><button className="primary" disabled={loading} onClick={()=>void createShareLink()}>{loading?"공유 링크 생성 중...":"공유 링크 만들기"}</button></div>
     </section>}
     <footer><Brand/><p>여유를 찾는 여행, 쉼표 하나.</p><small>© 2026 Comma Tour</small></footer>

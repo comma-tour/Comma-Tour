@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Download, MapPin, Route } from "lucide-react";
 import { CourseData, getCoursePdfUrl, getSharedCourse } from "../../../lib/api";
+import KakaoCourseMap from "../../components/KakaoCourseMap";
 
 const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80";
@@ -46,6 +47,7 @@ export default function SharedCoursePage() {
                 <div><MapPin /><span>방문 명소<strong>{course.spotCount}곳</strong></span></div>
                 <div><Route /><span>예상 거리<strong>{course.totalDistanceKm.toFixed(1)}km</strong></span></div>
               </div>
+              <KakaoCourseMap course={course} />
               <div className="shared-route-list">
                 {course.route.map((spot) => (
                   <article key={spot.spotId}>
