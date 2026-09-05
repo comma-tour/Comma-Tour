@@ -24,6 +24,7 @@ from ranking.features import (
     cnctr_rate_gap,
     compute_pseudo_label,
     coord_distance_km,
+    estimate_travel_time_minutes_fallback,
     normalize_rlte_rank,
 )
 
@@ -50,12 +51,21 @@ def build_training_pairs(
 
     pairs: list[TrainingPair] = []
     for c in candidates:
+        if c.travel_time_minutes is not None:
+            travel_time = c.travel_time_minutes
+        else:
+            # [6순위] 카카오 이동시간이 아직 수집되지 않은 후보(예: 기존 mock/구 데이터셋)는
+            # Haversine 거리 기반 추정치로 폴백한다. 실제 학습 데이터 재수집(카카오 클라이언트) 전까지의 임시 조치.
+            travel_time = estimate_travel_time_minutes_fallback(
+                coord_distance_km(congested.mapx, congested.mapy, c.mapx, c.mapy)
+            )
+
         features = CandidateFeatures(
             rlte_rank_norm=normalize_rlte_rank(c.rlte_rank),
             category_match=category_match_score(congested.content_type_id, c.rlte_ctgry_lcls_nm),
             embedding_similarity=similarity_by_name[c.rlte_tats_nm],
             cnctr_rate_gap=cnctr_rate_gap(congested.cnctr_rate_7d_avg, c.cnctr_rate_7d_avg),
-            coord_distance=coord_distance_km(congested.mapx, congested.mapy, c.mapx, c.mapy),
+            travel_time_minutes=travel_time,
         )
         pseudo_label = compute_pseudo_label(features)
         pairs.append(
@@ -94,14 +104,14 @@ if __name__ == "__main__":
     pairs = build_training_pairs(congested, candidates)
 
     print(f"과밀 관광지: {congested.tats_nm}\n")
-    header = f"{'순위':<4}{'후보':<14}{'pseudo_label':<14}{'rankNorm':<10}{'catMatch':<10}{'embSim':<10}{'cnctrGap':<10}{'distKm':<8}"
+    header = f"{'순위':<4}{'후보':<14}{'pseudo_label':<14}{'rankNorm':<10}{'catMatch':<10}{'embSim':<10}{'cnctrGap':<10}{'travelMin':<10}"
     print(header)
     for i, p in enumerate(pairs, start=1):
         f = p.features
         print(
             f"{i:<4}{p.candidate_rlte_tats_nm:<14}{p.pseudo_label:<14.4f}"
             f"{f.rlte_rank_norm:<10.2f}{f.category_match:<10.1f}{f.embedding_similarity:<10.4f}"
-            f"{f.cnctr_rate_gap:<10.1f}{f.coord_distance:<8.1f}"
+            f"{f.cnctr_rate_gap:<10.1f}{f.travel_time_minutes:<10.1f}"
         )
 
     output_path = "data/processed/training_pairs_mock.json"

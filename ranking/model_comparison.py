@@ -34,7 +34,7 @@ FEATURE_COLUMNS = [
     "category_match",
     "embedding_similarity",
     "cnctr_rate_gap",
-    "coord_distance",
+    "travel_time_minutes",
 ]
 
 
@@ -81,15 +81,15 @@ def _make_rule_only_predictor() -> Callable[[np.ndarray], np.ndarray]:
     from ranking.features import PSEUDO_LABEL_WEIGHTS
 
     def predict(X: np.ndarray) -> np.ndarray:
-        rank_norm, cat_match, emb_sim, cnctr_gap, coord_dist = X.T
+        rank_norm, cat_match, emb_sim, cnctr_gap, travel_time = X.T
         normalized_gap = cnctr_gap / 100.0
-        proximity = 1.0 / (1.0 + coord_dist)
+        proximity = 1.0 / (1.0 + travel_time / 10.0)
         return (
             PSEUDO_LABEL_WEIGHTS["rlte_rank_norm"] * rank_norm
             + PSEUDO_LABEL_WEIGHTS["category_match"] * cat_match
             + PSEUDO_LABEL_WEIGHTS["embedding_similarity"] * emb_sim
             + PSEUDO_LABEL_WEIGHTS["cnctr_rate_gap"] * normalized_gap
-            + abs(PSEUDO_LABEL_WEIGHTS["coord_distance"]) * proximity
+            + abs(PSEUDO_LABEL_WEIGHTS["travel_time_minutes"]) * proximity
         )
 
     return predict

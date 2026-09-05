@@ -24,9 +24,11 @@ copy .env.example .env
 # macOS/Linux
 cp .env.example .env
 ```
-`.env` 파일 열고 한국관광공사 OpenAPI 서비스 키 입력 (디코딩 키 사용):
+`.env` 파일 열고 한국관광공사 OpenAPI 서비스 키 + 카카오모빌리티 REST API 키 입력:
 ```
 KORSERVICE_API_KEY=발급받은_디코딩_키
+KAKAO_REST_API_KEY=발급받은_REST_API_키   
+# 카카오 개발자 콘솔의 "REST API 키" (JavaScript 키 아님, backend/.env와 동일한 키 사용)
 ```
 
 **4. 임베딩 모델 동작 확인**
@@ -39,19 +41,24 @@ python -m matching.embedding
 python -m matching.live_api_client
 ```
 
-**6. 모델 학습** (데이터 수집 → 모델 비교 → 최종 학습)
+**6. 카카오모빌리티 이동시간 조회 확인** (mock 데이터로 API 연결 확인)
+```bash
+python -m matching.kakao_mobility_client
+```
+
+**7. 모델 학습** (데이터 수집(이동시간 포함) → 모델 비교 → 최종 학습)
 ```bash
 python -m ranking.build_multi_spot_dataset
 python -m ranking.model_comparison
 python -m ranking.train_final_model
 ```
 
-**7. 추천 함수 테스트**
+**8. 추천 함수 테스트**
 ```bash
 python -m ranking.recommend
 ```
 
-**8. 응답 속도 벤치마크** (선택)
+**9. 응답 속도 벤치마크** (선택)
 ```bash
 python -m ranking.benchmark
 ```

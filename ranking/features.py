@@ -11,7 +11,7 @@
 │ 카테고리 3단 일치도          │ TarRlteTarService1        │ rlteCtgryLclsNm / MclsNm / SclsNm (예: 관광지/문화관광/전시시설) │
 │ 임베딩 코사인 유사도          │ KorService2 (로컬 계산)      │ [정정] detailCommon2.overview → matching/embedding.py │
 │ cnctrRate 격차            │ TatsCnctrRateService      │ [주의] 향후 30일 예측치가 baseYmd별 배열로 옴, 단일값 아님        │
-│ 좌표 거리                  │ KorService2               │ mapx, mapy (WGS84 경도/위도, Haversine 등으로 거리 계산)   │
+│ 실제 이동시간(분)           │ 카카오모빌리티 자동차 길찾기 API    │ durationMinutes (편도, 캐시 우선 - route_service.py) │
 └─────────────────────────┴───────────────────────────┴──────────────────────────────────────────────┘
 
 [1순위 검증 결과 - 정정 사항]
@@ -25,6 +25,13 @@
        서비스 목적과 어긋남 → 7일 평균이 균형점). 은진님 배치 계층에서 7일치 평균을 미리 계산해 저장 권장.
     3. rlteRank 방향 확인: 매뉴얼 응답 예제에서 rlteRank=1이 최상위 연관 후보로 나열됨.
        "낮을수록 연관도 높음"이 맞으므로 정규화 시 역수 또는 (max_rank - rank) 방식으로 방향 반전 필요.
+    4. [6순위] coord_distance(Haversine 직선거리) → travel_time_minutes(실제 이동시간)로 대체.
+       "차로 30~40분 반경" 요구사항은 직선거리보다 실제 도로 이동시간으로 판단하는 게 정확하다는
+       팀 논의 결과에 따른 변경. travel_time_minutes는 은진님 배치 계층이 카카오모빌리티 API
+       (캐시 경유, route_service.get_driving_route_cached)로 미리 계산해 Candidate에 채워 넣는다.
+       Kakao API 실패/미수집 시에는 estimate_travel_time_minutes_fallback()으로 Haversine 거리 기반
+       추정치를 대신 사용한다 (완전히 값이 없는 것보다 낫다는 판단, course_service.py의 기존
+       폴백 패턴과 동일한 사상).
 
 갱신주기 주의 (4장 4.2절, 매뉴얼 재확인 완료):
     - cnctrRate: 일 1회 갱신 (TatsCnctrRateService 매뉴얼 표에서 확인)
@@ -48,20 +55,22 @@ FEATURE_SOURCES = {
     "category_match": "TarRlteTarService1.rlteCtgryLclsNm/MclsNm/SclsNm (3단 일치 개수 또는 가중 일치도)",
     "embedding_similarity": "matching/embedding.py 코사인 유사도 (KorService2 detailCommon2.overview 기반, detailIntro2 아님)",
     "cnctr_rate_gap": "TatsCnctrRateService.cnctrRate (조회시점부터 향후 7일 평균, 과밀지-대체지 격차. 확정 사유는 상단 docstring 참고)",
-    "coord_distance": "KorService2.mapx/mapy (WGS84, Haversine 거리)",
+    "travel_time_minutes": "카카오모빌리티 자동차 길찾기 API durationMinutes (편도, 캐시 경유). 미수집 시 Haversine 거리 기반 추정치로 폴백.",
 }
 
-# 3순위: pseudo-label 가중합 초안 (상식적 기준, 팀 정성 검토로 조정 예정)
+# 6순위: pseudo-label 가중합 (상식적 기준, 팀 정성 검토로 조정 예정)
 # 주의: 아래 가중치는 "정규화된(0~1) feature"에 곱해지는 값이다. rlte_rank_norm/category_match/embedding_similarity는
-# 원래도 대략 0~1 범위지만, cnctr_rate_gap과 coord_distance는 원시값 단위(퍼센트포인트, km)가 서로 달라
+# 원래도 대략 0~1 범위지만, cnctr_rate_gap과 travel_time_minutes는 원시값 단위(퍼센트포인트, 분)가 서로 달라
 # compute_pseudo_label() 내부에서 먼저 0~1 범위로 정규화한 뒤에 이 가중치를 곱한다 (그대로 곱하면 값의 스케일이 다른
 # feature가 결과를 압도하는 문제가 있었음 - 3순위 검토 중 발견해 정규화 단계를 추가함).
+# travel_time_minutes 가중치는 이전 coord_distance(0.05)보다 높였다: 직선거리보다 사용자 체감에 가깝고,
+# "차로 30~40분" 요구사항의 핵심 feature가 됐기 때문. category_match를 0.05만큼 낮춰 합계 1.0을 유지했다.
 PSEUDO_LABEL_WEIGHTS = {
     "rlte_rank_norm": 0.3,
-    "category_match": 0.2,
+    "category_match": 0.15,
     "embedding_similarity": 0.3,
     "cnctr_rate_gap": 0.15,
-    "coord_distance": -0.05,  # 거리가 멀수록 감점 (정규화된 proximity가 아닌 원시 거리 방향에 맞춰 음수 가중치 유지)
+    "travel_time_minutes": -0.1,  # 이동시간이 길수록 감점 (정규화된 proximity가 아닌 원시값 방향에 맞춰 음수 가중치 유지)
 }
 
 # 카테고리 일치도 계산용: KorService2 contentTypeId → TarRlteTarService1 rlteCtgryLclsNm 대분류명 매핑
@@ -86,7 +95,7 @@ class CandidateFeatures:
     category_match: float  # 0 또는 1 (대분류 일치 여부, 3순위 스코프: 대분류만)
     embedding_similarity: float  # -1~1 (보통 0~1), matching/similarity_matching.py 결과 재사용
     cnctr_rate_gap: float  # 원시값(퍼센트포인트), 과밀지 - 대체지 7일평균 cnctrRate (양수일수록 대체지가 덜 붐빔)
-    coord_distance: float  # 원시값(km), Haversine 거리
+    travel_time_minutes: float  # 원시값(분), 카카오모빌리티 실제 이동시간 (미수집 시 Haversine 기반 추정치로 폴백)
 
 
 def normalize_rlte_rank(rank: int, max_rank: int = 15) -> float:
@@ -116,6 +125,7 @@ def category_match_score(congested_content_type_id: str, candidate_rlte_ctgry_lc
 def coord_distance_km(mapx1: float, mapy1: float, mapx2: float, mapy2: float) -> float:
     """
     두 지점(WGS84 경도 mapx, 위도 mapy) 간 Haversine 거리를 km 단위로 계산한다.
+    travel_time_minutes를 못 구했을 때 estimate_travel_time_minutes_fallback()이 사용한다.
     """
     lon1, lat1, lon2, lat2 = map(radians, [mapx1, mapy1, mapx2, mapy2])
     dlon = lon2 - lon1
@@ -123,6 +133,16 @@ def coord_distance_km(mapx1: float, mapy1: float, mapx2: float, mapy2: float) ->
     a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
     earth_radius_km = 6371.0
     return 2 * earth_radius_km * asin(sqrt(a))
+
+
+def estimate_travel_time_minutes_fallback(distance_km: float, avg_speed_kmh: float = 30.0) -> float:
+    """
+    카카오모빌리티 API가 실패했거나(요청 폭주 등) 아직 캐시/수집이 안 된 경우를 위한 폴백.
+    직선거리를 평균 주행속도(기본 30km/h, 시내 주행 가정)로 나눠 대략적인 이동시간을 추정한다.
+    실제값보다 부정확하지만, feature 자체가 비어서 모델 입력이 깨지는 것보다는 낫다는 판단
+    (course_service.py가 카카오 실패 시 Haversine으로 폴백하는 것과 같은 사상).
+    """
+    return (distance_km / avg_speed_kmh) * 60.0
 
 
 def cnctr_rate_gap(congested_cnctr_rate_7d_avg: float, candidate_cnctr_rate_7d_avg: float) -> float:
@@ -142,19 +162,21 @@ def compute_pseudo_label(features: CandidateFeatures) -> float:
         - rlte_rank_norm, category_match: 이미 0~1이므로 그대로 사용
         - embedding_similarity: 코사인 유사도라 이미 대략 0~1 범위 (음수 나올 수 있으나 실측상 드묾), 그대로 사용
         - cnctr_rate_gap: 퍼센트포인트(-100~100) 단위를 100으로 나눠 대략 -1~1로 정규화
-        - coord_distance: km 단위 원시값을 그대로 쓰면 값이 커서(수십 km) 결과를 압도하므로,
-          proximity = 1 / (1 + distance_km) 형태로 0~1 범위 근접도 점수로 변환 후 사용
-          (거리가 0km면 1.0, 거리가 멀어질수록 0에 가까워짐 - PSEUDO_LABEL_WEIGHTS의 음수 가중치와 결합하면
-          "가까울수록 가점"이 되도록 부호를 맞춰야 하므로, 가중치는 양수로 보고 proximity에 곱한다)
+        - travel_time_minutes: 분 단위 원시값을 그대로 쓰면 값이 커서 결과를 압도하므로,
+          proximity = 1 / (1 + minutes/10) 형태로 0~1 범위 근접도 점수로 변환 후 사용
+          (0분이면 1.0, 10분이면 0.5, 30분이면 0.25, 40분이면 0.2로 완만하게 감소 - km 단위였던
+          이전 coord_distance 변환식보다 분 단위 스케일에 맞게 나눔값 10을 추가했다.
+          PSEUDO_LABEL_WEIGHTS의 음수 가중치와 결합해 "이동시간이 짧을수록 가점"이 되도록
+          부호를 맞춰야 하므로, 가중치는 abs()로 양수화해 proximity에 곱한다)
     """
     normalized_cnctr_rate_gap = features.cnctr_rate_gap / 100.0
-    coord_proximity = 1.0 / (1.0 + features.coord_distance)  # 0~1, 가까울수록 1에 근접
+    travel_time_proximity = 1.0 / (1.0 + features.travel_time_minutes / 10.0)  # 0~1, 가까울수록 1에 근접
 
     score = (
         PSEUDO_LABEL_WEIGHTS["rlte_rank_norm"] * features.rlte_rank_norm
         + PSEUDO_LABEL_WEIGHTS["category_match"] * features.category_match
         + PSEUDO_LABEL_WEIGHTS["embedding_similarity"] * features.embedding_similarity
         + PSEUDO_LABEL_WEIGHTS["cnctr_rate_gap"] * normalized_cnctr_rate_gap
-        + abs(PSEUDO_LABEL_WEIGHTS["coord_distance"]) * coord_proximity  # proximity로 변환했으므로 양수로 적용
+        + abs(PSEUDO_LABEL_WEIGHTS["travel_time_minutes"]) * travel_time_proximity  # proximity로 변환했으므로 양수로 적용
     )
     return score
