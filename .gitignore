@@ -12,7 +12,8 @@ out/
 build/
 
 # local env files
-.env*
+.env
+.env.local
 
 # misc
 .DS_Store
