@@ -496,7 +496,7 @@ def _draw_number_circle(c, number, cx, cy):
 
 
 # 사용자 제공 화살표 이미지
-ARROW_IMAGE_PATH = r"C:\Users\cholo\commatour\backend\app\assets\arrow.png"
+ARROW_IMAGE_PATH = APP_DIR / "assets" / "arrow.png"
 
 
 def _draw_down_arrow(c, cx, cy):
@@ -504,7 +504,7 @@ def _draw_down_arrow(c, cx, cy):
     c.saveState()
 
     # 원본 이미지 비율을 유지한다.
-    with Image.open(ARROW_IMAGE_PATH) as im:
+    with Image.open(str(ARROW_IMAGE_PATH)) as im:
         img_w, img_h = im.size
     aspect = img_w / float(img_h)
 
@@ -516,7 +516,7 @@ def _draw_down_arrow(c, cx, cy):
     y = cy - arrow_h / 2 - 1.5
 
     c.drawImage(
-        ARROW_IMAGE_PATH,
+        str(ARROW_IMAGE_PATH),
         x, y,
         width=arrow_w,
         height=arrow_h,

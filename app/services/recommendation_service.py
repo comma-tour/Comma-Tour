@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.spot import Spot
@@ -5,6 +8,7 @@ from app.services.ai_recommendation_service import (
     build_ai_inputs,
     run_ai_recommendation,
 )
+from app.services.api_cache_service import get_or_fetch
 from app.services.spot_service import (
     get_congestion_level,
     upsert_spots_from_korservice,
@@ -13,6 +17,10 @@ from app.services.tourism_api import (
     get_related_tourist_spots,
     search_tourist_spots,
 )
+
+# TarRlteTarService1의 rlteRank는 월 1회 갱신되는 것으로 확인됐다(AI 팀 조사).
+# 하루~한 달 사이 아무 값이나 캐시해도 데이터 신선도 손해가 없으니 30일로 잡는다.
+RELATED_SPOTS_CACHE_TTL = timedelta(days=30)
 
 
 def _has_final_consonant(text: str) -> bool:
@@ -78,14 +86,21 @@ def create_recommendations(
         f"cnctr_rate_7d_avg={spot.cnctr_rate_7d_avg!r}"
     )
 
-    related_items = get_related_tourist_spots(
-        area_cd=spot.area_cd,
-        signgu_cd=spot.signgu_cd,
-        tourist_spot_name=spot.tourist_spot_name,
-        # TarRlteTarService1은 관광지 하나당 최대 50건까지 제공한다(2026-09 조사로 확인).
-        # KorService2 매칭 실패로 상당수가 걸러지기 때문에, 처음부터 50건을 받아와야
-        # 필터 이후 남는 후보 수가 줄어들지 않는다.
-        limit=50,
+    # [1순위 캐시 작업] 이전엔 요청마다 무조건 실시간 호출했다. rlteRank가 월 1회만
+    # 갱신되는 걸 감안하면 매번 다시 부를 이유가 없어서, spot 단위로 30일 캐시한다.
+    related_items = get_or_fetch(
+        db=db,
+        cache_key=f"tarlte:{spot.area_cd}:{spot.signgu_cd}:{spot.tourist_spot_name}",
+        ttl=RELATED_SPOTS_CACHE_TTL,
+        fetch_fn=lambda: get_related_tourist_spots(
+            area_cd=spot.area_cd,
+            signgu_cd=spot.signgu_cd,
+            tourist_spot_name=spot.tourist_spot_name,
+            # TarRlteTarService1은 관광지 하나당 최대 50건까지 제공한다(2026-09 조사로 확인).
+            # KorService2 매칭 실패로 상당수가 걸러지기 때문에, 처음부터 50건을 받아와야
+            # 필터 이후 남는 후보 수가 줄어들지 않는다.
+            limit=50,
+        ),
     )
     print(f"[진단] get_related_tourist_spots 원본 반환 건수: {len(related_items)}")
 
@@ -144,31 +159,39 @@ def create_recommendations(
         if candidate is None:
             continue
 
-        # 추천 관광지를 KorService에서 다시 조회해서
-        # 백엔드 spots DB에도 저장한다.
-        kor_items = search_tourist_spots(
-            keyword=name,
-            limit=5,
+        # [1순위 캐시 작업] 이전엔 이미 DB에 있어도 매번 KorService를 다시 불렀다.
+        # 추천 후보는 build_ai_inputs()에서 이미 한 번 조회/캐시됐을 가능성이 높으니,
+        # DB에 먼저 있는지 확인하고 없을 때만 실시간으로 조회한다.
+        stored = db.scalar(
+            select(Spot).where(Spot.tourist_spot_name == name)
         )
 
-        if not kor_items:
-            continue
+        if stored is None:
+            # 추천 관광지를 KorService에서 조회해서
+            # 백엔드 spots DB에 새로 저장한다.
+            kor_items = search_tourist_spots(
+                keyword=name,
+                limit=5,
+            )
 
-        # 우선 exact title match를 사용하고,
-        # 없으면 첫 번째 결과를 fallback으로 사용
-        matched = next(
-            (
-                kor_item
-                for kor_item in kor_items
-                if kor_item.get("title") == name
-            ),
-            kor_items[0],
-        )
+            if not kor_items:
+                continue
 
-        stored = upsert_spots_from_korservice(
-            db=db,
-            items=[matched],
-        )[0]
+            # 우선 exact title match를 사용하고,
+            # 없으면 첫 번째 결과를 fallback으로 사용
+            matched = next(
+                (
+                    kor_item
+                    for kor_item in kor_items
+                    if kor_item.get("title") == name
+                ),
+                kor_items[0],
+            )
+
+            stored = upsert_spots_from_korservice(
+                db=db,
+                items=[matched],
+            )[0]
 
         stored.category_large = item.get("rlteCtgryLclsNm")
         stored.category_medium = item.get("rlteCtgryMclsNm")
