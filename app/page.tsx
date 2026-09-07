@@ -8,6 +8,8 @@ import { ApiSpot, CourseData, RecommendationItem, createCourse, getRecommendatio
 import KakaoCourseMap from "./components/KakaoCourseMap";
 
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80";
+const RESULTS_PER_PAGE = 5;
+const PAGE_BUTTONS_PER_GROUP = 10;
 
 type Spot = { id:number; name:string; address:string; description:string; category:string; rate:number|null; image:string; difference?:number|null };
 
@@ -43,16 +45,22 @@ export default function Home() {
   const [tab,setTab]=useState<"region"|"name">("region");
   const [query,setQuery]=useState(""); const [sido,setSido]=useState(""); const [sigungu,setSigungu]=useState("");
   const [searched,setSearched]=useState(false); const [results,setResults]=useState<Spot[]>([]);
+  const [currentPage,setCurrentPage]=useState(1);
   const [selectedBase,setSelectedBase]=useState<Spot|null>(null); const [recommendations,setRecommendations]=useState<Spot[]>([]);
   const [selected,setSelected]=useState<number[]>([]); const [course,setCourse]=useState<CourseData|null>(null);
   const [loading,setLoading]=useState(false); const [error,setError]=useState(""); const [shareUrl,setShareUrl]=useState("");
+
+  const totalPages=Math.ceil(results.length/RESULTS_PER_PAGE);
+  const pageGroupStart=Math.floor((currentPage-1)/PAGE_BUTTONS_PER_GROUP)*PAGE_BUTTONS_PER_GROUP+1;
+  const pageNumbers=Array.from({length:Math.min(PAGE_BUTTONS_PER_GROUP,Math.max(0,totalPages-pageGroupStart+1))},(_,index)=>pageGroupStart+index);
+  const visibleResults=results.slice((currentPage-1)*RESULTS_PER_PAGE,currentPage*RESULTS_PER_PAGE);
 
   async function performSearch() {
     const keyword=query.trim();
     if (tab==="name"&&!keyword) return setError("관광지명을 입력해 주세요.");
     if (tab==="region"&&!sido&&!sigungu&&!keyword) return setError("지역 또는 관광지명을 선택해 주세요.");
-    setLoading(true); setError(""); setSearched(true);
-    try { const data=await searchSpots({keyword:keyword||undefined,sido:tab==="region"?sido||undefined:undefined,sigungu:tab==="region"?sigungu||undefined:undefined}); setResults(data.items.map(fromSearch)); }
+    setLoading(true); setError(""); setSearched(true); setCurrentPage(1);
+    try { const data=await searchSpots({keyword:keyword||undefined,sido:tab==="region"?sido||undefined:undefined,sigungu:tab==="region"?sigungu||undefined:undefined,limit:100}); setResults(data.items.map(fromSearch)); }
     catch(e) { setResults([]); setError(message(e)); } finally { setLoading(false); }
   }
   async function goRecommend(spot:Spot) {
@@ -81,8 +89,9 @@ export default function Home() {
           <label className="search-input"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="관광지명을 입력하세요" onKeyDown={e=>e.key==="Enter"&&void performSearch()}/>{query&&<button aria-label="검색어 지우기" onClick={()=>setQuery("")}><X size={16}/></button>}</label><button className="primary" disabled={loading} onClick={()=>void performSearch()}>{loading?"검색 중...":"검색"}</button></div></div>
       {error&&<div className="api-error" role="alert">{error}</div>}
       <div className="section-title"><div><span>SEARCH RESULT</span><h2>검색 결과 <small>{results.length}건</small></h2></div></div>
-      {results.length?<div className="result-list">{results.map(spot=>{const state=crowd(spot.rate);return <article className="result-card" key={spot.id}>
+      {results.length?<><div className="result-list">{visibleResults.map(spot=>{const state=crowd(spot.rate);return <article className="result-card" key={spot.id}>
         { }<img src={spot.image} alt={`${spot.name} 전경`}/><div className="spot-info"><div className="category">{spot.category}</div><h3>{spot.name}</h3><p className="address"><MapPin size={14}/>{spot.address}</p><p>{spot.description}</p></div><div className="rate-block"><Gauge rate={spot.rate}/><span className={`status ${state.className}`}>{state.text}</span></div><button className="recommend-button" onClick={()=>void goRecommend(spot)}>유사 명소 추천 보기 <ChevronRight size={17}/></button></article>})}</div>
+        {totalPages>1&&<nav className="pagination" aria-label="검색 결과 페이지"><button disabled={currentPage===1} onClick={()=>setCurrentPage(page=>page-1)} aria-label="이전 페이지">◀</button>{pageNumbers.map(page=><button key={page} className={currentPage===page?"active":""} aria-current={currentPage===page?"page":undefined} onClick={()=>setCurrentPage(page)}>{page}</button>)}<button disabled={currentPage===totalPages} onClick={()=>setCurrentPage(page=>page+1)} aria-label="다음 페이지">▶</button><button disabled={currentPage===totalPages} onClick={()=>setCurrentPage(totalPages)} aria-label="마지막 페이지">▶▶</button></nav>}</>
         :<div className="empty"><Search size={42}/><h3>{searched&&!loading?"검색 결과가 없습니다":"관광지를 검색해 보세요"}</h3><p>{searched&&!loading?"다른 키워드나 지역으로 다시 검색해 보세요.":"검색 결과는 백엔드 관광지 API에서 불러옵니다."}</p></div>}
     </section>}
 

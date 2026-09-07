@@ -74,6 +74,12 @@ select { padding:0 34px 0 13px; color:#59655f; min-width:160px; }
 .recommend-button { font-size:13px; }
 .empty { text-align:center; padding:80px 20px; color:#8c9992; border:1px dashed #ced8d2; border-radius:12px; }
 .empty h3 { color:var(--ink); margin-bottom:6px; }
+.pagination { display:flex; justify-content:center; align-items:center; margin-top:28px; }
+.pagination button { min-width:38px; height:38px; padding:0 9px; border:1px solid #d5ddd8; border-right:0; background:white; color:#59655f; }
+.pagination button:first-child { border-radius:6px 0 0 6px; }
+.pagination button:last-child { border-right:1px solid #d5ddd8; border-radius:0 6px 6px 0; }
+.pagination button:hover:not(:disabled),.pagination button.active { background:var(--green); color:white; border-color:var(--green); }
+.pagination button:disabled { color:#b4bcb8; background:#f7f8f7; cursor:not-allowed; }
 .api-error { margin:18px 0; padding:13px 16px; border:1px solid #f0b8b8; border-radius:8px; background:#fff4f4; color:#a52d35; font-size:13px; }
 .share-result { margin:16px 0; padding:13px 16px; border:1px solid #b9d9c6; border-radius:8px; background:var(--mint); color:var(--green-dark); font-size:13px; overflow-wrap:anywhere; }
 .share-result a { color:var(--green); font-weight:700; }
@@ -86,7 +92,7 @@ select { padding:0 34px 0 13px; color:#59655f; min-width:160px; }
 .shared-route-list h2 { margin:0 0 6px; font-size:18px; }
 .shared-route-list p { margin:0; color:var(--muted); font-size:13px; }
 .back { border:0; background:none; color:var(--muted); display:flex; gap:6px; align-items:center; padding:0; margin-bottom:22px; }
-.base-spot { min-height:112px; display:grid; grid-template-columns:150px 1fr auto; align-items:center; gap:22px; border:1px solid var(--line); border-left:4px solid var(--green); border-radius:10px; padding:11px; background:#fbfdfb; }
+.base-spot { min-height:112px; display:grid; grid-template-columns:150px 1fr auto; align-items:center; gap:22px; border:1px solid var(--green); border-radius:10px; padding:11px; background:#fbfdfb; }
 .base-spot img { width:150px; height:88px; object-fit:cover; border-radius:7px; }
 .base-spot h2 { margin:3px 0; }
 .base-spot p { color:var(--muted); margin:0; font-size:12px; }
@@ -151,6 +157,7 @@ select { padding:0 34px 0 13px; color:#59655f; min-width:160px; }
 .timeline p { margin:3px 0 7px; color:var(--muted); font-size:10px; }
 .timeline button { border:0; background:none; color:#9aa39e; padding:2px; }
 .course-actions { margin-top:22px; display:flex; gap:10px; justify-content:flex-end; }
+.course-actions a { text-decoration:none; }
 footer { display:flex; align-items:center; gap:20px; padding:28px 44px; background:#123c29; color:white; }
 footer .brand img { filter:brightness(0) invert(1); opacity:.92; }
 footer p { color:#b7c9bf; font-size:12px; flex:1; }
