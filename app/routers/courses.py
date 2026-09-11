@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -16,6 +18,8 @@ from app.services.course_service import (
     create_shared_course,
     get_shared_course,
 )
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(
@@ -184,6 +188,9 @@ def download_shared_course_pdf(
             shared_course,
         )
     except Exception:
+        logger.exception(
+            "코스 PDF 생성 실패 (share_id=%s)", share_id
+        )
         raise HTTPException(
             status_code=500,
             detail={

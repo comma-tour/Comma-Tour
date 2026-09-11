@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from app.models.spot import Spot
+from app.services.route_service import get_driving_route_cached
 from app.services.tourism_api import (
     get_cnctr_rate_7d_avg,
     get_spot_overview,
@@ -60,6 +61,25 @@ def build_ai_inputs(
             and cached_spot.mapy is not None
             and cached_spot.cnctr_rate_7d_avg is not None
         ):
+            # [6순위] 목적지가 이미 DB에 있는 경우에만 실제 이동시간을 채운다. 아직 DB에 없는
+            # (처음 보는) 후보는 spot id가 없어 캐시 키를 만들 수 없으므로, ranking/recommend.py의
+            # Haversine 기반 폴백에 맡긴다 - 추천 결과 재조회 이후 DB에 저장되면 다음 요청부터는
+            # 이 분기를 타게 된다.
+            travel_time_minutes = None
+            try:
+                driving_route = get_driving_route_cached(
+                    db=db,
+                    origin_spot_id=spot.id,
+                    origin_mapx=congested.mapx,
+                    origin_mapy=congested.mapy,
+                    destination_spot_id=cached_spot.id,
+                    destination_mapx=float(cached_spot.mapx),
+                    destination_mapy=float(cached_spot.mapy),
+                )
+                travel_time_minutes = driving_route["durationMinutes"]
+            except Exception:
+                pass  # 카카오 API 실패 시 None으로 남기고 AI 모듈의 폴백에 맡긴다
+
             candidates.append(
                 Candidate(
                     rlte_tats_nm=name,
@@ -79,6 +99,7 @@ def build_ai_inputs(
                     cnctr_rate_7d_avg=float(
                         cached_spot.cnctr_rate_7d_avg
                     ),
+                    travel_time_minutes=travel_time_minutes,
                 )
             )
             continue
