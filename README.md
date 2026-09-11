@@ -73,14 +73,29 @@ npm run dev
 ```
 정상 기동하면 http://localhost:3000 에서 확인 가능.
 
-**4. AI 모듈 환경 설정**
+**4. AI 모듈 실행**
 ```bash
 cd ai
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
+
+pip install --upgrade pip   # Windows : python -m pip install --upgrade pip
+pip install -r requirements.txt
 
 # Windows
 copy .env.example .env
 # macOS/Linux
 cp .env.example .env
+
+python -m ranking.build_multi_spot_dataset
+python -m ranking.model_comparison
+python -m ranking.train_final_model
+
+python -m ranking.recommend
 ```
 
 각 모듈별 상세 실행 방법(환경변수 값 채우는 방법, 모델 학습 순서 등)은 아래 문서를 참고하세요.
