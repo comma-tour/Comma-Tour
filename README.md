@@ -92,9 +92,7 @@ copy .env.example .env
 cp .env.example .env
 
 python -m ranking.build_multi_spot_dataset
-python -m ranking.model_comparison
 python -m ranking.train_final_model
-
 python -m ranking.recommend
 ```
 
