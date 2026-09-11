@@ -27,11 +27,17 @@ from ranking.features import (
     category_match_score,
     cnctr_rate_gap,
     coord_distance_km,
+    estimate_travel_time_minutes_fallback,
     normalize_rlte_rank,
 )
 from ranking.train_final_model import MODEL_PATH
 
 _model_bundle = None  # lazy-loaded (model, feature_columns, model_type)
+
+# [5순위] "차로 30~40분 반경" 요구사항을 실제 이동시간 기준으로 반영한다.
+# 40분을 상한으로 잡아서 30~40분 요구사항을 넉넉하게 포함한다 (팀 논의: 값 자체는 배포 후 사용자
+# 피드백으로 30~40 사이에서 조정 가능하도록 recommend()의 max_travel_time_min 파라미터로 열어둔다).
+MAX_TRAVEL_TIME_MIN = 40.0
 
 
 def _load_model_bundle() -> dict:
@@ -43,6 +49,28 @@ def _load_model_bundle() -> dict:
             )
         _model_bundle = joblib.load(MODEL_PATH)
     return _model_bundle
+
+
+def _travel_time_minutes(congested: CongestedSpot, c: Candidate) -> float:
+    """
+    후보의 실제 이동시간을 반환한다. 은진님 배치 계층이 이미 채워 넣었으면(c.travel_time_minutes) 그대로 쓰고,
+    카카오 API 실패 등으로 비어있으면 Haversine 거리 기반 추정치로 폴백한다.
+    """
+    if c.travel_time_minutes is not None:
+        return c.travel_time_minutes
+    distance_km = coord_distance_km(congested.mapx, congested.mapy, c.mapx, c.mapy)
+    return estimate_travel_time_minutes_fallback(distance_km)
+
+
+def _filter_by_travel_time(
+    congested: CongestedSpot, candidates: list[Candidate], max_minutes: float
+) -> list[Candidate]:
+    """
+    [5순위] 이동시간이 max_minutes를 넘는 후보를 미리 제외한다. 이전에 검토했던 Haversine
+    직선거리(35km) 컷오프를 실제 이동시간 기준으로 대체한 버전이다. 임베딩 계산 전에 걸러서
+    연산량도 함께 줄인다.
+    """
+    return [c for c in candidates if _travel_time_minutes(congested, c) <= max_minutes]
 
 
 def _compute_features(congested: CongestedSpot, candidates: list[Candidate]) -> list[CandidateFeatures]:
@@ -58,14 +86,18 @@ def _compute_features(congested: CongestedSpot, candidates: list[Candidate]) -> 
                 category_match=category_match_score(congested.content_type_id, c.rlte_ctgry_lcls_nm),
                 embedding_similarity=similarity_by_name[c.rlte_tats_nm],
                 cnctr_rate_gap=cnctr_rate_gap(congested.cnctr_rate_7d_avg, c.cnctr_rate_7d_avg),
-                coord_distance=coord_distance_km(congested.mapx, congested.mapy, c.mapx, c.mapy),
+                travel_time_minutes=_travel_time_minutes(congested, c),
             )
         )
     return features_list
 
 
 def recommend(
-    congested: CongestedSpot, candidates: list[Candidate], top_k: int = 5, debug: bool = False
+    congested: CongestedSpot,
+    candidates: list[Candidate],
+    top_k: int = 5,
+    debug: bool = False,
+    max_travel_time_min: float = MAX_TRAVEL_TIME_MIN,
 ) -> dict:
     """
     과밀 관광지 1곳 + 연관관광지 후보 목록을 받아, 학습된 모델로 점수를 매기고 상위 top_k개를 반환한다.
@@ -75,11 +107,24 @@ def recommend(
         candidates: 연관관광지 후보 목록
         top_k: 반환할 개수 (기본 5, 최대 20으로 클램프 - docs/5순위_통합가이드.md에서 확정)
         debug: True면 각 후보의 scoreBreakdown(개별 feature 값)도 함께 반환
+        max_travel_time_min: [5순위] 이 값(분)을 넘는 이동시간의 후보는 채점 전에 제외한다.
+            기본 40분("차로 30~40분" 요구사항). 배포 후 사용자 피드백으로 조정 가능하도록 파라미터로 열어둠.
 
     Returns:
         docs/recommend_endpoint_spec_draft.md의 응답 스펙과 동일한 구조의 dict
     """
     top_k = max(1, min(top_k, 20))  # topK 상한 확정치 (5순위 스펙 확정, 08.18)
+
+    candidates = _filter_by_travel_time(congested, candidates, max_travel_time_min)
+
+    if not candidates:
+        return {
+            "congestedSpot": {
+                "tAtsNm": congested.tats_nm,
+                "cnctrRate7dAvg": round(congested.cnctr_rate_7d_avg, 2),
+            },
+            "recommendations": [],
+        }
 
     bundle = _load_model_bundle()
     model, feature_columns = bundle["model"], bundle["feature_columns"]
@@ -101,6 +146,7 @@ def recommend(
             "cnctrRate7dAvg": round(candidate.cnctr_rate_7d_avg, 2),
             "mapx": candidate.mapx,
             "mapy": candidate.mapy,
+            "travelTimeMinutes": round(features.travel_time_minutes, 1),
             "score": round(float(score), 4),
         }
         if debug:
@@ -109,7 +155,7 @@ def recommend(
                 "categoryMatch": features.category_match,
                 "embeddingSimilarity": round(features.embedding_similarity, 4),
                 "cnctrRateGap": round(features.cnctr_rate_gap, 2),
-                "coordDistance": round(features.coord_distance, 2),
+                "travelTimeMinutes": round(features.travel_time_minutes, 1),
             }
         recommendations.append(entry)
 

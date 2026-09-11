@@ -30,6 +30,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+from matching.kakao_mobility_client import fill_travel_times
 from matching.live_api_client import RELATED_SPOT_DATA_MAX_YM, build_congested_spots_for_region
 from ranking.dataset_builder import build_training_pairs
 
@@ -56,6 +57,12 @@ def build_multi_spot_dataset(output_path: str) -> None:
 
         for congested, candidates in spot_results:
             ambiguous_by_name = {c.rlte_tats_nm: c.is_region_ambiguous for c in candidates}
+
+            # [6순위] 후보 목록에 카카오모빌리티 실제 이동시간을 채운다. 실패한 쌍은
+            # travel_time_minutes=None으로 남고, build_training_pairs()가 Haversine 기반
+            # 추정치로 대체한다 (ranking/features.py의 estimate_travel_time_minutes_fallback).
+            candidates = fill_travel_times(congested, candidates)
+
             pairs = build_training_pairs(congested, candidates)
 
             for p in pairs:

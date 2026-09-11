@@ -48,6 +48,8 @@ class Candidate:
     mapy: float  # GPS Y좌표(위도, WGS84)
     cnctr_rate_7d_avg: float  # TatsCnctrRateService 향후 7일 평균 cnctrRate
     is_region_ambiguous: bool = False  # KorService2 검색 결과가 여러 건이라 지역 매칭이 불확실했는지 (live_api_client.py 참고)
+    travel_time_minutes: float | None = None  # [6순위] 카카오모빌리티 실제 이동시간(분). 은진님 배치 계층이 채워 넣음.
+    # None이면 ranking 쪽에서 estimate_travel_time_minutes_fallback()으로 대체한다.
 
 
 def get_mock_congested_spot_with_candidates() -> tuple[CongestedSpot, list[Candidate]]:
