@@ -74,6 +74,12 @@ select { padding:0 34px 0 13px; color:#59655f; min-width:160px; }
 .recommend-button { font-size:13px; }
 .empty { text-align:center; padding:80px 20px; color:#8c9992; border:1px dashed #ced8d2; border-radius:12px; }
 .empty h3 { color:var(--ink); margin-bottom:6px; }
+.pagination { display:flex; justify-content:center; align-items:center; margin-top:28px; }
+.pagination button { min-width:38px; height:38px; padding:0 9px; border:1px solid #d5ddd8; border-right:0; background:white; color:#59655f; }
+.pagination button:first-child { border-radius:6px 0 0 6px; }
+.pagination button:last-child { border-right:1px solid #d5ddd8; border-radius:0 6px 6px 0; }
+.pagination button:hover:not(:disabled),.pagination button.active { background:var(--green); color:white; border-color:var(--green); }
+.pagination button:disabled { color:#b4bcb8; background:#f7f8f7; cursor:not-allowed; }
 .api-error { margin:18px 0; padding:13px 16px; border:1px solid #f0b8b8; border-radius:8px; background:#fff4f4; color:#a52d35; font-size:13px; }
 .share-result { margin:16px 0; padding:13px 16px; border:1px solid #b9d9c6; border-radius:8px; background:var(--mint); color:var(--green-dark); font-size:13px; overflow-wrap:anywhere; }
 .share-result a { color:var(--green); font-weight:700; }
@@ -86,7 +92,7 @@ select { padding:0 34px 0 13px; color:#59655f; min-width:160px; }
 .shared-route-list h2 { margin:0 0 6px; font-size:18px; }
 .shared-route-list p { margin:0; color:var(--muted); font-size:13px; }
 .back { border:0; background:none; color:var(--muted); display:flex; gap:6px; align-items:center; padding:0; margin-bottom:22px; }
-.base-spot { min-height:112px; display:grid; grid-template-columns:150px 1fr auto; align-items:center; gap:22px; border:1px solid var(--line); border-left:4px solid var(--green); border-radius:10px; padding:11px; background:#fbfdfb; }
+.base-spot { min-height:112px; display:grid; grid-template-columns:150px 1fr auto; align-items:center; gap:22px; border:1px solid var(--green); border-radius:10px; padding:11px; background:#fbfdfb; }
 .base-spot img { width:150px; height:88px; object-fit:cover; border-radius:7px; }
 .base-spot h2 { margin:3px 0; }
 .base-spot p { color:var(--muted); margin:0; font-size:12px; }
@@ -127,6 +133,13 @@ select { padding:0 34px 0 13px; color:#59655f; min-width:160px; }
 .course-layout { display:grid; grid-template-columns:1.45fr 1fr; gap:16px; }
 .map-view { min-height:485px; border:1px solid #d8e4dd; border-radius:13px; position:relative; overflow:hidden; background-color:#e8f4ee; background-image:linear-gradient(32deg,transparent 48%,#d2e6d8 49%,#d2e6d8 51%,transparent 52%),linear-gradient(-28deg,transparent 47%,#d5e8dc 48%,#d5e8dc 50%,transparent 51%); }
 .map-view::after { content:""; position:absolute; right:-8%; top:-10%; width:38%; height:120%; background:#c8e7f3; border-radius:50% 0 0 50%; }
+.kakao-map-view { background:#e8efeb; }
+.kakao-map-view::after { display:none; }
+.kakao-map-canvas { position:absolute; inset:0; }
+.kakao-course-marker { display:flex; align-items:center; gap:6px; transform:translateY(-4px); white-space:nowrap; }
+.kakao-course-marker span { width:30px; height:30px; display:grid; place-items:center; border:3px solid white; border-radius:50%; background:var(--green); color:white; font-size:11px; font-weight:800; box-shadow:0 3px 8px #173c2866; }
+.kakao-course-marker b { padding:5px 8px; border-radius:5px; background:white; color:var(--ink); font-size:11px; box-shadow:0 2px 7px #0002; }
+.map-error { position:absolute; inset:0; z-index:3; display:grid; place-items:center; padding:24px; text-align:center; color:var(--muted); background:#f1f5f2; }
 .map-road { position:absolute; height:7px; background:#207fbe; border:2px solid white; border-radius:20px; z-index:2; transform-origin:left center; }
 .road-one { left:18%; top:70%; width:46%; transform:rotate(-27deg); }
 .road-two { left:54%; top:45%; width:25%; transform:rotate(-35deg); }
@@ -144,6 +157,7 @@ select { padding:0 34px 0 13px; color:#59655f; min-width:160px; }
 .timeline p { margin:3px 0 7px; color:var(--muted); font-size:10px; }
 .timeline button { border:0; background:none; color:#9aa39e; padding:2px; }
 .course-actions { margin-top:22px; display:flex; gap:10px; justify-content:flex-end; }
+.course-actions a { text-decoration:none; }
 footer { display:flex; align-items:center; gap:20px; padding:28px 44px; background:#123c29; color:white; }
 footer .brand img { filter:brightness(0) invert(1); opacity:.92; }
 footer p { color:#b7c9bf; font-size:12px; flex:1; }
