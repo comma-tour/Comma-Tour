@@ -6,7 +6,7 @@
 
 ### 팀원
 **경기대학교 AI컴퓨터공학부 인공지능전공**
-- [장수민](https://github.com/1ongevitymin) : 팀대표, ai(추천 모델 개발)
+- [장수민](https://github.com/1ongevitymin) : ai(추천 모델 개발) + 배포/인프라(Docker, Cloud Run)
 
 **경기대학교 AI컴퓨터공학부 컴퓨터공학전공**
 - [김은진](https://github.com/silverjini0) : frontend(Next.js 프론트엔드)
