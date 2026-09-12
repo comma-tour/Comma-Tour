@@ -63,6 +63,28 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 정상 기동하면 http://127.0.0.1:8000/docs 에서 API 문서(Swagger) 확인 가능.
 
+**2-1. Backend 실행 (Docker, 선택)**
+
+Google Cloud Run 배포를 염두에 두고 만든 Dockerfile입니다. 빌드 컨텍스트는 `backend/`가 아니라 프로젝트 루트 기준입니다.
+
+사전 준비물:
+- `ai/models/ranking_model.joblib` (로컬에서 `cd ai && python -m ranking.train_final_model`로 미리 학습해둔 결과물)
+- `backend/app/assets/fonts/NanumGothic-Regular.ttf`, `NanumGothic-Bold.ttf` (코스 PDF 생성용 한글 폰트)
+- `backend/.env` (`.env.example` 참고)
+
+```bash
+docker build -f backend/Dockerfile -t comma-tour-backend .
+docker run -p 8000:8080 --env-file backend/.env comma-tour-backend
+```
+
+컨테이너는 매번 새로 뜰 때마다 빈 DB로 시작하므로, 최초 실행 후 시딩을 한 번 해줘야 합니다 (`docker ps`로 컨테이너 이름 확인 후 실행).
+
+```bash
+docker exec -it <컨테이너이름> python -m scripts.seed_haeundae
+```
+
+정상 기동하면 로컬 실행과 동일하게 http://127.0.0.1:8000/docs 에서 확인 가능.
+
 **3. Frontend 실행**
 ```bash
 cd frontend
