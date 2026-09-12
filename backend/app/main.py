@@ -2,13 +2,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from fastapi.responses import JSONResponse
+from app.core.config import settings
 from app.routers import (
     courses_router,
     recommendations_router,
     spots_router,
 )
-
-
 
 app = FastAPI(
     title="CommaTour API",
@@ -21,6 +20,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        settings.FRONTEND_BASE_URL,
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -23,14 +23,27 @@ from app.core.config import settings
 from app.services.course_map_service import generate_course_map_image
 
 
-FONT_DIR = Path(r"C:\Windows\Fonts")
-REGULAR_FONT_PATH = FONT_DIR / "malgun.ttf"
-BOLD_FONT_PATH = FONT_DIR / "malgunbd.ttf"
+APP_DIR = Path(__file__).resolve().parents[1]
+
+# 한글 PDF 생성용 폰트.
+# Docker(Linux) 환경에는 시스템에 한글 폰트가 없으므로 프로젝트에 폰트를 번들링해서 쓴다
+# (app/assets/fonts/ - 나눔고딕, SIL Open Font License, google/fonts 배포본).
+# 로컬 윈도우 개발환경에 맑은 고딕이 설치돼 있으면 그걸 우선 사용한다 (기존 동작 유지).
+_BUNDLED_FONT_DIR = APP_DIR / "assets" / "fonts"
+_WINDOWS_FONT_DIR = Path(r"C:\Windows\Fonts")
+
+if (_WINDOWS_FONT_DIR / "malgun.ttf").exists():
+    FONT_DIR = _WINDOWS_FONT_DIR
+    REGULAR_FONT_PATH = FONT_DIR / "malgun.ttf"
+    BOLD_FONT_PATH = FONT_DIR / "malgunbd.ttf"
+else:
+    FONT_DIR = _BUNDLED_FONT_DIR
+    REGULAR_FONT_PATH = FONT_DIR / "NanumGothic-Regular.ttf"
+    BOLD_FONT_PATH = FONT_DIR / "NanumGothic-Bold.ttf"
 
 REGULAR_FONT_NAME = "MalgunGothic"
 BOLD_FONT_NAME = "MalgunGothicBold"
 
-APP_DIR = Path(__file__).resolve().parents[1]
 LOGO_PATH = APP_DIR / "assets" / "comma-tour-logo.png"
 SECTION_LOGO_CANDIDATES = [
     APP_DIR / "assets" / "comma-mark.png",
@@ -69,7 +82,9 @@ def _bold_font_name() -> str:
 
 def _register_fonts() -> None:
     if not REGULAR_FONT_PATH.exists():
-        raise RuntimeError("한글 PDF 생성을 위한 맑은 고딕 폰트를 찾을 수 없습니다.")
+        raise RuntimeError(
+            f"한글 PDF 생성용 폰트를 찾을 수 없습니다: {REGULAR_FONT_PATH}"
+        )
     pdfmetrics.registerFont(TTFont(REGULAR_FONT_NAME, str(REGULAR_FONT_PATH)))
     if BOLD_FONT_PATH.exists():
         pdfmetrics.registerFont(TTFont(BOLD_FONT_NAME, str(BOLD_FONT_PATH)))

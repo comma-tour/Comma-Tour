@@ -1,0 +1,32 @@
+# 이 파일은 프로젝트 루트(Comma-Tour/)에 ".dockerignore" 라는 이름으로 저장하세요.
+
+# 버전관리
+.git
+.gitignore
+
+# 파이썬 캐시/가상환경
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/venv/
+**/*.egg-info/
+
+# 로컬 개발 산출물 / 시크릿 (이미지에 절대 포함하지 않음)
+backend/*.db
+backend/.env
+ai/.env
+
+# ai 학습 데이터 원본 (용량 크고, 모델 재현엔 불필요)
+ai/data/raw/*
+ai/data/processed/*
+!ai/data/raw/.gitkeep
+!ai/data/processed/.gitkeep
+ai/notebooks/
+ai/docs/
+
+# 프론트엔드 (백엔드 이미지 빌드에 불필요)
+frontend/
+
+# 기타
+*.log
+.DS_Store
