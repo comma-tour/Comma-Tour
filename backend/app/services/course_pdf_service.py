@@ -20,7 +20,7 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
 from app.core.config import settings
-from app.services.course_map_service import generate_course_map_image
+from app.services.course_map_render_service import render_course_map_image
 
 
 APP_DIR = Path(__file__).resolve().parents[1]
@@ -329,7 +329,7 @@ def _draw_summary(c, x, y, w, h, course, travel_text):
         c.setFont(_bold_font_name(), 14.5)
         c.drawCentredString(cx, y + 4.0 * mm, values[i])
 
-def _draw_map_card(c, x, y, w, h, route, distance):
+def _draw_map_card(c, x, y, w, h, route, path, distance):
     _draw_round_rect(c, x, y, w, h, fill=BRAND_MINT_PALE)
     _draw_section_title(c, x + 5 * mm, y + h - 7 * mm, "코스 경로", "pin")
 
@@ -337,7 +337,16 @@ def _draw_map_card(c, x, y, w, h, route, distance):
     image_y = y + 10 * mm
     image_w = w - 8 * mm
     image_h = h - 24 * mm
-    map_image = generate_course_map_image(route)
+
+    # 스크린샷 비율을 PDF 지도 칸의 실제 비율과 맞춘다.
+    # _draw_cover()는 "꽉 채우기(cover)" 방식이라, 스크린샷 비율이 이 칸의 비율과
+    # 다르면 남는 쪽을 잘라내는데, 하필 그 잘리는 영역에 핀이 걸리면 안 보이게 된다.
+    aspect = image_w / image_h
+    render_width = 1400
+    render_height = round(render_width / aspect)
+    map_image = render_course_map_image(
+        route, path, width=render_width, height=render_height,
+    )
     if map_image is not None:
         _draw_cover(c, map_image, image_x, image_y, image_w, image_h, radius=2.2 * mm)
     else:
@@ -730,7 +739,10 @@ def generate_course_pdf(shared_course: dict) -> bytes:
     share_w = content_w - map_w - gap
     utility_y = utility_top - utility_h
 
-    _draw_map_card(c, margin_x, utility_y, map_w, utility_h, route, course["totalDistanceKm"])
+    _draw_map_card(
+        c, margin_x, utility_y, map_w, utility_h,
+        route, course.get("path", []), course["totalDistanceKm"],
+    )
     _draw_share_card(c, margin_x + map_w + gap, utility_y, share_w, utility_h, share_url)
 
     # 3) 일정 섹션: 시안처럼 가로 전체에 옅은 섹션 바

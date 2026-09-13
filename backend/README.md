@@ -15,6 +15,7 @@ source .venv/bin/activate
 ```bash
 pip install --upgrade pip   # Windows : python -m pip install --upgrade pip
 pip install -r requirements.txt
+playwright install chromium  # PDF 지도 스크린샷용 헤드리스 브라우저 (최초 1회, 수백MB 다운로드)
 ```
 
 **3. 환경변수 설정**
@@ -29,6 +30,7 @@ cp .env.example .env
 DATABASE_URL=sqlite:///./commatour.db   # 로컬은 sqlite, 배포는 Postgres 등으로 교체
 KORSERVICE_API_KEY=발급받은_디코딩_키       # ai/.env와 동일한 키 사용
 KAKAO_REST_API_KEY=발급받은_REST_API_키    # 카카오 개발자 콘솔의 "REST API 키" (JavaScript 키 아님)
+KAKAO_JS_API_KEY=발급받은_JavaScript_키    # frontend .env.local의 NEXT_PUBLIC_KAKAO_MAP_KEY와 동일한 값
 FRONTEND_BASE_URL=http://localhost:3000
 ```
 

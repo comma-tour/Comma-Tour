@@ -30,6 +30,7 @@ websockets==17.0.1
 requests==2.34.2
 reportlab==5.0.0
 pillow==12.3.0
+playwright==1.62.0
 
 
 # AI recommendation integration

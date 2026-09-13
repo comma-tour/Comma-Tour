@@ -28,6 +28,17 @@ RUN pip install --no-cache-dir --upgrade pip \
        --extra-index-url https://download.pytorch.org/whl/cpu
 
 # ---------------------------------------------------------------------------
+# 1-1) PDF 지도 렌더링용 Chromium (Playwright)
+#    course_map_render_service.py가 헤드리스 브라우저로 프론트엔드와 동일한
+#    카카오맵(핀 마커 + 경로선)을 캡처해 PDF에 넣는다.
+#    --with-deps 가 Chromium 실행에 필요한 시스템 라이브러리(libnss3 등)까지
+#    apt로 함께 설치해준다. 이미지 용량이 수백MB 늘어나고, 실행 시 메모리도
+#    더 필요하므로 Cloud Run 등 배포 시 메모리 할당량(512MB~1GB 이상 권장)을
+#    올려줘야 한다.
+# ---------------------------------------------------------------------------
+RUN playwright install --with-deps chromium
+
+# ---------------------------------------------------------------------------
 # 2) 애플리케이션 코드
 # ---------------------------------------------------------------------------
 COPY backend/app         ./app
@@ -59,7 +70,8 @@ COPY ai/ranking  /app/ai/ranking
 # ---------------------------------------------------------------------------
 COPY ai/models/ranking_model.joblib /app/ai/models/ranking_model.joblib
 
-RUN chmod +x entrypoint.sh
+RUN chmod +x entrypoint.sh \
+    && sed -i 's/\r$//' entrypoint.sh
 
 # Cloud Run은 PORT 환경변수를 주입합니다. 로컬 테스트용 기본값만 8080으로 지정.
 ENV PORT=8080
