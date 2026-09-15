@@ -10,6 +10,7 @@ main { min-height:100vh; }
 .shell { max-width:1240px; min-height:100vh; margin:auto; background:var(--paper); box-shadow:0 0 40px rgba(33,61,45,.06); }
 header { height:82px; padding:0 38px; display:grid; grid-template-columns:1fr 410px 1fr; align-items:center; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; background:rgba(255,255,255,.95); backdrop-filter:blur(10px); }
 .brand { display:flex; align-items:center; white-space:nowrap; }
+.brand-button { width:max-content; padding:0; border:0; background:none; color:inherit; font:inherit; cursor:pointer; }
 .brand img { width:160px; height:auto; display:block; }
 .icon-button { justify-self:end; border:0; background:none; color:var(--ink); padding:8px; }
 .steps { list-style:none; padding:0; margin:0; display:flex; justify-content:space-between; position:relative; }
